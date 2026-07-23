@@ -1,0 +1,24 @@
+# Nuxt
+.nuxt
+.output
+.data
+dist
+
+# Node
+node_modules
+npm-debug.log*
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Runtime data (analytics DB, replays, geo DB)
+data/
+
+# Playwright
+test-results/
+playwright-report/
+
+# OS
+.DS_Store

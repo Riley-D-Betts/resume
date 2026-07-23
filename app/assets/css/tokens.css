@@ -1,0 +1,54 @@
+/* ============================================================
+   MISSION CONTROL — design tokens
+   Single source of truth for the visual system. Everything on
+   the page (public + /ops) is built from these variables.
+   ============================================================ */
+
+:root {
+  /* -- surface layers ------------------------------------- */
+  --bg-0: #070a0b;   /* page void */
+  --bg-1: #0a0e0f;   /* panel base */
+  --bg-2: #101617;   /* raised / hover */
+  --bg-teal: #012a31; /* fobech section wash */
+
+  /* -- signal colors -------------------------------------- */
+  --teal: #007484;      /* fobech brand signal */
+  --teal-hot: #00b4c8;  /* active glow */
+  --green: #2fd575;     /* OK / running */
+  --amber: #ffb020;     /* warn / hold */
+  --red: #ff4545;       /* fault */
+
+  /* -- text ------------------------------------------------ */
+  --text: #c8d3d5;
+  --text-dim: #5c6b6e;
+  --text-faint: #374346;
+
+  /* -- lines ----------------------------------------------- */
+  --hairline: #1c2527;
+  --hairline-lit: #2c3a3d;
+
+  /* -- type ------------------------------------------------ */
+  --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+  --font-display: 'Archivo Black', 'Arial Black', sans-serif;
+
+  --fs-micro: 0.6875rem;  /* 11px — labels, stamps */
+  --fs-data: 0.8125rem;   /* 13px — readouts, log lines */
+  --fs-body: 0.9375rem;   /* 15px — prose */
+  --fs-display: clamp(3rem, 10vw, 8.5rem);
+
+  /* -- rhythm ---------------------------------------------- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 1rem;
+  --space-4: 2rem;
+  --space-5: 4rem;
+  --space-6: 8rem;
+
+  --hud-h: 34px;
+
+  /* -- z layers -------------------------------------------- */
+  --z-hud: 80;
+  --z-boot: 100;
+  --z-scanlines: 90;
+  --z-cursor: 110;
+}
