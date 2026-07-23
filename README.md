@@ -50,6 +50,7 @@ better-sqlite3 native binding — build on the same OS/arch/Node you deploy on.
 
 ```sh
 cp .env.example .env    # fill in both passwords
+mkdir -p data && sudo chown -R 1000:1000 data   # container runs as uid 1000
 docker compose up -d --build
 ```
 
