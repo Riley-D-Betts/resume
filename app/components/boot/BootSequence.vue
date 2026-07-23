@@ -12,6 +12,15 @@ const active = ref(true)
 const lines = resume.boot.lines
 const BAR_LEN = 24
 
+// No-JS fallback: hide the overlay entirely so SSR content is readable.
+// Rendered ONLY on the server — a client-side vdom <noscript><style> gets
+// recreated as a live style node during hydration and would apply the
+// rule even with JS enabled (display:none for everyone).
+useHead(
+  { noscript: [{ innerHTML: '<style>.boot { display: none !important; }</style>' }] },
+  { mode: 'server' },
+)
+
 const root = ref<HTMLElement | null>(null)
 let tl: gsap.core.Timeline | undefined
 let keyHandler: ((e: KeyboardEvent) => void) | undefined
@@ -104,10 +113,6 @@ onUnmounted(() => {
 
 <template>
   <div v-if="active" ref="root" class="boot" data-testid="boot" @click="skip">
-    <noscript>
-      <component :is="'style'">.boot { display: none !important; }</component>
-    </noscript>
-
     <div class="boot__inner">
       <div v-for="(line, i) in lines" :key="i" class="boot__line" aria-hidden="true">{{ line }}</div>
       <div class="boot__row">
