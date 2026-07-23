@@ -1,0 +1,26 @@
+# Dependencies + build output (rebuilt inside the image)
+node_modules
+.nuxt
+.output
+dist
+
+# Runtime data — lives in a volume, never in the image
+data
+.data
+
+# Secrets
+.env
+.env.*
+
+# VCS / tooling
+.git
+.claude
+.DS_Store
+npm-debug.log*
+
+# Tests + docs (not needed at runtime)
+tests
+test-results
+playwright-report
+README.md
+docs

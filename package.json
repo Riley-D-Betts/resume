@@ -10,7 +10,7 @@
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "seed": "node scripts/seed-visit.mjs",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test -c tests"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.1",
