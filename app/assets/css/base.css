@@ -1,0 +1,128 @@
+/* ============================================================
+   Base — reset, page voice, shared primitives
+   ============================================================ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+body {
+  background: var(--bg-0);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--fs-data);
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+@media (pointer: fine) {
+  body {
+    cursor: crosshair;
+  }
+}
+
+::selection {
+  background: var(--teal);
+  color: #fff;
+}
+
+a {
+  color: var(--teal-hot);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+  text-decoration-style: dotted;
+}
+
+:focus-visible {
+  outline: 1px solid var(--teal-hot);
+  outline-offset: 3px;
+}
+
+img,
+svg {
+  max-width: 100%;
+  display: block;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+/* -- shared text utilities -------------------------------- */
+
+.label {
+  font-size: var(--fs-micro);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.display {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  line-height: 0.92;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+/* Elements hidden until their entrance animation runs.
+   The .js-anim class is added BY JAVASCRIPT (never SSR),
+   so with JS disabled every word stays visible. */
+.js-anim {
+  visibility: hidden;
+}
+
+/* -- blinking block cursor -------------------------------- */
+.blink {
+  display: inline-block;
+  width: 0.55em;
+  height: 1em;
+  background: var(--green);
+  vertical-align: text-bottom;
+  animation: blink 1.06s steps(1) infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blink {
+    animation: none;
+  }
+}
+
+/* -- honeypot: must be unreachable by humans --------------- */
+.void-link {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  opacity: 0;
+  pointer-events: none;
+}
