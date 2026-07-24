@@ -3,6 +3,12 @@ import { resume } from '~/data/resume'
 
 useHead({ title: resume.meta.title })
 
+/**
+ * The Home dashboard — NetSuite's "Role Center".
+ * NetSuite's Home page deliberately has NO breadcrumb, NO page-title
+ * bar and NO action buttons: the menu bar sits directly above the
+ * portlet grid, with only a right-aligned link row for chrome.
+ */
 const d = resume.dashboard
 const account = resume.account
 const toast = useToast()
@@ -13,41 +19,38 @@ const asOf = ref('—')
 onMounted(() => {
   asOf.value = new Intl.DateTimeFormat('en-US', {
     timeZone: resume.identity.timezone,
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
+    month: 'numeric',
     day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
   }).format(new Date())
 })
 
 function externalAttrs(href?: string) {
   return href ? { href, target: '_blank', rel: 'noopener' } : {}
 }
+
+const locked = () => toast.show('This dashboard is Locked — content and layout cannot be changed.')
 </script>
 
 <template>
   <div data-section="home">
-    <NsBreadcrumb :items="[{ label: 'Home' }]" />
+    <div class="ns-dashbar">
+      <span class="ns-dashbar__spacer ns-dashbar__greet">
+        <b>{{ d.greeting }}</b> — {{ account.accountName }} · {{ account.roleLabel }}
+      </span>
+      <button type="button" class="ns-linkish" @click="locked">Personalize</button>
+      <button type="button" class="ns-linkish" @click="locked">Layout</button>
+      <NuxtLink to="/colophon">Set Up Custom Tab</NuxtLink>
+    </div>
 
-    <NsPageTitle title="Home" meta="Role Center" :subtitle="`${d.greeting} — welcome back to the account.`">
-      <template #actions>
-        <button
-          type="button"
-          class="ns-btn"
-          @click="toast.show('Layout is locked — you have read-only Administrator access to this résumé.', { icon: '🔒' })"
-        >
-          ⚙ Personalize
-        </button>
-        <NuxtLink to="/contact" class="ns-btn ns-btn--primary">＋ New Message</NuxtLink>
-      </template>
-    </NsPageTitle>
-
-    <div class="ns-note" style="margin-bottom: 14px">
-      <b>New Release {{ account.release }}.</b> {{ d.tip }}
+    <div class="ns-note" style="margin-bottom: 8px">
+      <b>Release {{ account.release }} is now available.</b> {{ d.tip }}
     </div>
 
     <div class="ns-dash">
-      <!-- Column 1 -->
+      <!-- Narrow left column -->
       <div class="ns-dash__col">
         <NsPortlet title="Reminders">
           <ul class="ns-remind">
@@ -59,31 +62,70 @@ function externalAttrs(href?: string) {
               class="ns-remind__item"
             >
               <span class="ns-remind__count" :class="`ns-remind__count--${r.tone}`">{{ r.count }}</span>
-              <span class="ns-remind__label" :class="{ 'ns-remind__label--plain': !r.to }">{{ r.label }}</span>
+              <span class="ns-remind__label">{{ r.label }}</span>
             </component>
           </ul>
           <template #foot>
-            <button
-              type="button"
-              class="ns-linkish"
-              @click="toast.show('Reminders refreshed. Everything is on track.')"
-            >
-              Set Up Reminders
-            </button>
+            <span style="color: var(--ns-muted)">Last refreshed {{ asOf }}</span>
           </template>
         </NsPortlet>
 
-        <NsPortlet title="Key Performance Indicators">
-          <NsKpiTable :kpis="d.kpis" />
+        <NsPortlet title="Settings" :refreshable="false">
+          <ul class="ns-links">
+            <button type="button" class="ns-links__item" style="text-align: left; width: 100%" @click="locked">
+              Personalize Dashboard
+            </button>
+            <NuxtLink to="/employee" class="ns-links__item">Set Preferences</NuxtLink>
+            <NuxtLink to="/contact" class="ns-links__item">Change Email</NuxtLink>
+            <NuxtLink to="/colophon" class="ns-links__item">Set Up Custom Tab</NuxtLink>
+          </ul>
+        </NsPortlet>
+
+        <NsPortlet title="Shortcuts" :refreshable="false">
+          <ul class="ns-links">
+            <component
+              :is="s.to ? NsLink : 'a'"
+              v-for="s in d.shortcuts"
+              :key="s.label"
+              v-bind="s.to ? { to: s.to } : externalAttrs(s.href)"
+              class="ns-links__item"
+            >
+              {{ s.label }}
+            </component>
+          </ul>
           <template #foot>
-            <span style="color: var(--ns-muted)">As of {{ asOf }} · {{ account.environment }}</span>
+            <NuxtLink to="/contact">Set Up Shortcuts</NuxtLink>
           </template>
         </NsPortlet>
       </div>
 
-      <!-- Column 2 -->
+      <!-- Wide middle column -->
       <div class="ns-dash__col">
-        <NsPortlet title="KPI Meter — Uptime">
+        <NsPortlet title="Key Performance Indicators">
+          <NsKpiTable :kpis="d.kpis" />
+          <template #foot>
+            <span style="color: var(--ns-muted)">As of {{ asOf }} · Date Range: This Period</span>
+          </template>
+        </NsPortlet>
+
+        <NsPortlet title="Trend Graph">
+          <NsTrend :title="d.trend.title" :unit="d.trend.unit" :points="d.trend.points" />
+          <template #foot>
+            <NuxtLink to="/positions">Open Employment History</NuxtLink>
+          </template>
+        </NsPortlet>
+
+        <NsPortlet title="Report Snapshots">
+          <NsReport :rows="d.report.rows" />
+          <template #foot>
+            <NuxtLink to="/employee">Skills Coverage by Discipline — view full report</NuxtLink>
+          </template>
+        </NsPortlet>
+      </div>
+
+      <!-- Narrow right column -->
+      <div class="ns-dash__col ns-dash__col--3">
+        <NsPortlet title="KPI Meter">
           <NsMeter
             :label="d.meter.label"
             :value="d.meter.value"
@@ -94,23 +136,6 @@ function externalAttrs(href?: string) {
           />
         </NsPortlet>
 
-        <NsPortlet title="Trend Graph">
-          <NsTrend :title="d.trend.title" :unit="d.trend.unit" :points="d.trend.points" />
-          <template #foot>
-            <NuxtLink to="/positions">Open Employment History →</NuxtLink>
-          </template>
-        </NsPortlet>
-
-        <NsPortlet title="Report Snapshot — Skills Coverage">
-          <NsReport :rows="d.report.rows" />
-          <template #foot>
-            <NuxtLink to="/employee">View full skills matrix →</NuxtLink>
-          </template>
-        </NsPortlet>
-      </div>
-
-      <!-- Column 3 -->
-      <div class="ns-dash__col ns-dash__col--3">
         <NsPortlet title="Recent Records">
           <ul class="ns-recent">
             <component
@@ -121,41 +146,12 @@ function externalAttrs(href?: string) {
               class="ns-recent__item"
             >
               <span class="ns-recent__glyph">{{ rec.glyph }}</span>
-              <span class="ns-recent__type">{{ rec.type }}</span>
               <span class="ns-recent__name">{{ rec.name }}</span>
+              <span class="ns-recent__type">{{ rec.type }}</span>
             </component>
           </ul>
-        </NsPortlet>
-
-        <NsPortlet title="Shortcuts">
-          <div class="ns-tiles">
-            <component
-              :is="s.to ? NsLink : 'a'"
-              v-for="s in d.shortcuts"
-              :key="s.label"
-              v-bind="s.to ? { to: s.to } : externalAttrs(s.href)"
-              class="ns-tile"
-            >
-              <span class="ns-tile__glyph">{{ s.glyph }}</span>
-              <span class="ns-tile__label">{{ s.label }}</span>
-            </component>
-          </div>
-          <template #foot>
-            <NuxtLink to="/contact">Add shortcut → New Message</NuxtLink>
-          </template>
         </NsPortlet>
       </div>
     </div>
   </div>
 </template>
-
-<style scoped>
-.ns-linkish {
-  color: var(--ns-link);
-  font: inherit;
-  cursor: pointer;
-}
-.ns-linkish:hover {
-  text-decoration: underline;
-}
-</style>

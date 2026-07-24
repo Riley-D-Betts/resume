@@ -14,8 +14,8 @@ const is404 = computed(() => props.error.statusCode === 404)
   <div class="err">
     <header class="err__mast">
       <NuxtLink to="/" class="ns-logo">
-        <span class="ns-logo__tile">N</span>
-        <span class="ns-logo__word">Net<b>Suite</b></span>
+        <span class="ns-logo__oracle">ORACLE</span>
+        <span class="ns-logo__word">NetSuite</span>
       </NuxtLink>
     </header>
 
@@ -53,9 +53,9 @@ const is404 = computed(() => props.error.statusCode === 404)
   height: 46px;
   display: flex;
   align-items: center;
-  padding: 0 14px;
-  background: linear-gradient(180deg, #2c3d4f, #223140);
-  border-bottom: 1px solid #17222e;
+  padding: 0 12px;
+  background: var(--ns-mast-bg);
+  border-bottom: 3px solid var(--ns-menu-bg);
 }
 .err__body {
   flex: 1;
@@ -70,12 +70,12 @@ const is404 = computed(() => props.error.statusCode === 404)
   border-top: 3px solid var(--ns-brand);
   border-radius: var(--ns-radius);
   box-shadow: var(--ns-shadow);
-  padding: 30px 28px;
+  padding: 26px 24px;
   text-align: center;
 }
 .err__code {
-  font-size: 56px;
-  font-weight: 800;
+  font-size: 52px;
+  font-weight: 700;
   color: var(--ns-brand);
   line-height: 1;
 }

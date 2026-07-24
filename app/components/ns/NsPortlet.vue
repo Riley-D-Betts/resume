@@ -1,32 +1,65 @@
 <script setup lang="ts">
+/**
+ * A NetSuite dashboard portlet.
+ *
+ * NetSuite behaviours reproduced here:
+ *  - the title bar is the drag handle AND the minimize toggle
+ *  - controls stay hidden until the pointer is over the portlet
+ *  - the primary control is ONE dropdown caret whose menu holds
+ *    "Set Up" / "Refresh" / "Remove" — not a row of icons
+ */
 withDefaults(
   defineProps<{
     title: string
     flush?: boolean
-    collapsible?: boolean
     refreshable?: boolean
   }>(),
-  { flush: false, collapsible: true, refreshable: true },
+  { flush: false, refreshable: true },
 )
 
 const collapsed = ref(false)
+const menuOpen = ref(false)
 const spinning = ref(false)
+const root = ref<HTMLElement | null>(null)
+const toast = useToast()
 
 function refresh(): void {
+  menuOpen.value = false
   spinning.value = false
-  // restart the one-shot spin animation
   requestAnimationFrame(() => {
     spinning.value = true
     setTimeout(() => (spinning.value = false), 650)
   })
 }
+
+function setUp(): void {
+  menuOpen.value = false
+  toast.show('Dashboard personalization is locked on this account.')
+}
+
+function remove(): void {
+  menuOpen.value = false
+  toast.show('This portlet is part of the résumé. It stays.')
+}
+
+function onDoc(e: MouseEvent): void {
+  if (root.value && !root.value.contains(e.target as Node)) menuOpen.value = false
+}
+
+onMounted(() => document.addEventListener('click', onDoc))
+onBeforeUnmount(() => document.removeEventListener('click', onDoc))
 </script>
 
 <template>
-  <section class="ns-portlet" :class="{ 'ns-portlet--collapsed': collapsed }">
+  <section ref="root" class="ns-portlet" :class="{ 'ns-portlet--collapsed': collapsed }">
     <header class="ns-portlet__head">
-      <span class="ns-portlet__grip" aria-hidden="true">⠿</span>
-      <span class="ns-portlet__title">{{ title }}</span>
+      <span
+        class="ns-portlet__title"
+        :title="collapsed ? 'Expand' : 'Minimize'"
+        @click="collapsed = !collapsed"
+      >
+        {{ title }}
+      </span>
       <div class="ns-portlet__tools">
         <button
           v-if="refreshable"
@@ -35,21 +68,25 @@ function refresh(): void {
           :class="{ 'ns-portlet__tool--spin': spinning }"
           title="Refresh"
           aria-label="Refresh portlet"
-          @click="refresh"
+          @click.stop="refresh"
         >
           ⟳
         </button>
-        <span class="ns-portlet__tool" title="Portlet menu" aria-hidden="true">⚙</span>
         <button
-          v-if="collapsible"
           type="button"
           class="ns-portlet__tool"
-          :title="collapsed ? 'Expand' : 'Minimize'"
-          :aria-label="collapsed ? 'Expand portlet' : 'Minimize portlet'"
-          @click="collapsed = !collapsed"
+          title="Portlet menu"
+          aria-label="Portlet menu"
+          :aria-expanded="menuOpen"
+          @click.stop="menuOpen = !menuOpen"
         >
-          {{ collapsed ? '▸' : '▾' }}
+          ▾
         </button>
+        <div v-if="menuOpen" class="ns-portlet__menu">
+          <button type="button" class="ns-nav__item" @click="setUp">Set Up</button>
+          <button type="button" class="ns-nav__item" @click="refresh">Refresh</button>
+          <button type="button" class="ns-nav__item" @click="remove">Remove</button>
+        </div>
       </div>
     </header>
     <div class="ns-portlet__body" :class="{ 'ns-portlet__body--flush': flush }">

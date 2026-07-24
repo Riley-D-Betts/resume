@@ -21,22 +21,27 @@ export interface StatusReadout {
   live?: 'uptime' | 'clock'
 }
 
-/* ---- NetSuite chrome --------------------------------------- */
+/* ---- NetSuite chrome ---------------------------------------
+   NetSuite's menus are strictly SINGLE COLUMN: one label per row,
+   no category headings inside the panel and no descriptive
+   subtext. Rows with children show a right chevron and open a
+   flyout butted against the parent panel. Every menu's first row
+   is "<Tab> Overview", followed by a separator.
+   ------------------------------------------------------------ */
 export interface NavLink {
   label: string
   to?: string
   href?: string
-  desc?: string
-}
-export interface NavColumn {
-  heading: string
-  links: NavLink[]
+  /** rows with children render a › and open a flyout */
+  children?: NavLink[]
 }
 export interface NavTab {
   id: string
   label: string
+  /** the three icon-only tabs NetSuite pins to the far left */
+  icon?: 'recent' | 'shortcuts' | 'home'
   to?: string
-  columns?: NavColumn[]
+  items?: NavLink[]
 }
 
 /* ---- records ----------------------------------------------- */
@@ -179,6 +184,10 @@ export interface ResumeContent {
     timezone: string
   }
   nav: NavTab[]
+  /** the flyout NetSuite's star (Shortcuts) tab opens */
+  shortcutsMenu: NavLink[]
+  /** the flyout NetSuite's clock (Recent Records) tab opens */
+  recentMenu: NavLink[]
   dashboard: {
     greeting: string
     kpis: Kpi[]
@@ -257,92 +266,164 @@ export const resume: ResumeContent = {
     timezone: 'America/Boise',
   },
 
+  /* NetSuite's real Administrator menu bar, in NetSuite's real order.
+     The three icon tabs (clock / star / house) come first, exactly as
+     NetSuite pins them. Menus are single-column; every menu opens with
+     "<Tab> Overview" and a separator. The structure is genuine
+     NetSuite; the rows underneath are this résumé's records. */
   nav: [
-    { id: 'home', label: 'Home', to: '/' },
+    { id: 'recent', label: 'Recent Records', icon: 'recent' },
+    { id: 'shortcuts', label: 'Shortcuts', icon: 'shortcuts' },
+    { id: 'home', label: 'Home', icon: 'home', to: '/' },
     {
       id: 'activities',
       label: 'Activities',
-      columns: [
+      items: [
         {
-          heading: 'Career',
-          links: [
-            { label: 'Employment History', to: '/positions', desc: 'Every role, in order' },
-            { label: 'Current Position', to: '/positions/ida-milk', desc: 'IT Manager — Ida Milk (Suntado)' },
-            { label: 'Milestones', to: '/positions', desc: 'Promotions and inductions' },
+          label: 'Scheduling',
+          children: [
+            { label: 'Employment History', to: '/positions' },
+            { label: 'Milestones', to: '/positions/ida-milk' },
+            { label: 'Standing Meetings', to: '/positions/ida-milk' },
           ],
         },
+        { label: 'On-Call / Help Desk', to: '/positions/ida-milk' },
+        { label: 'Search', children: [{ label: 'All Positions', to: '/positions' }] },
+      ],
+    },
+    {
+      id: 'transactions',
+      label: 'Transactions',
+      items: [
         {
-          heading: 'Standing',
-          links: [
-            { label: 'Cross-Dept Meetings', to: '/positions/ida-milk', desc: 'IT ships what the floor needs' },
-            { label: 'On-Call / Help Desk', to: '/positions/ida-milk', desc: 'Nothing dropped, everything logged' },
+          label: 'Employees',
+          children: [
+            { label: 'Enter Induction', to: '/positions/ida-milk' },
+            { label: 'Enter Promotion', to: '/positions/big-dog-solar' },
+            { label: 'Approve Deployments', to: '/projects' },
           ],
         },
+        { label: 'Management', children: [{ label: 'Capital Requests ($0 Filed)', to: '/' }] },
       ],
     },
     {
       id: 'lists',
       label: 'Lists',
-      columns: [
+      items: [
         {
-          heading: 'Records',
-          links: [
-            { label: 'Employees', to: '/employee', desc: 'Riley Betts' },
-            { label: 'Subsidiaries', to: '/fobech', desc: 'Fobech — systems studio' },
-            { label: 'Positions', to: '/positions', desc: 'Employment history' },
+          label: 'Employees',
+          children: [
+            { label: 'Employees', to: '/employee' },
+            { label: 'Skills & Proficiency', to: '/employee' },
           ],
         },
         {
-          heading: 'Projects',
-          links: [
-            { label: 'Projects', to: '/projects', desc: 'Side builds, all statuses' },
-            { label: 'Skills & Certifications', to: '/employee', desc: 'On the Human Resources subtab' },
+          label: 'Relationships',
+          children: [
+            { label: 'Subsidiaries', to: '/fobech' },
+            { label: 'Positions', to: '/positions' },
           ],
         },
+        {
+          label: 'Supply Chain',
+          children: [
+            { label: 'Projects', to: '/projects' },
+            { label: 'Items', to: '/projects/kidcam' },
+          ],
+        },
+        { label: 'Search', children: [{ label: 'Saved Searches', to: '/projects' }] },
       ],
     },
     {
       id: 'reports',
       label: 'Reports',
-      columns: [
+      items: [
+        { label: 'New Search', to: '/projects' },
+        { label: 'Saved Searches', to: '/positions' },
         {
-          heading: 'Scorecards',
-          links: [
-            { label: 'KPI Scorecard', to: '/', desc: 'Uptime, spend, headcount' },
-            { label: 'Career Trajectory', to: '/', desc: 'Scope of responsibility over time' },
-            { label: 'Skills Coverage', to: '/', desc: 'Depth by discipline' },
+          label: 'Employees/HR',
+          children: [
+            { label: 'KPI Scorecard', to: '/' },
+            { label: 'Skills Coverage', to: '/' },
+            { label: 'Career Trajectory', to: '/' },
           ],
         },
+        { label: 'Custom Reports', children: [{ label: 'Uptime by Period', to: '/positions/ida-milk' }] },
       ],
     },
     {
-      id: 'fobech',
-      label: 'Fobech',
-      columns: [
+      id: 'analytics',
+      label: 'Analytics',
+      items: [
+        { label: 'Saved Searches', to: '/projects' },
+        { label: 'Datasets', to: '/projects' },
+        { label: 'Workbooks', to: '/' },
+      ],
+    },
+    {
+      id: 'documents',
+      label: 'Documents',
+      items: [
+        { label: 'Files', children: [{ label: 'File Cabinet', to: '/colophon' }] },
+        { label: 'Templates', to: '/colophon' },
+      ],
+    },
+    {
+      id: 'setup',
+      label: 'Setup',
+      items: [
         {
-          heading: 'Subsidiary',
-          links: [
-            { label: 'Subsidiary Record', to: '/fobech', desc: 'The independent systems studio' },
-            { label: 'Capabilities', to: '/fobech', desc: 'MES · Traceability · QC · Andon' },
-            { label: 'Visit fobech.com', href: 'https://fobech.com', desc: 'External site' },
+          label: 'Company',
+          children: [
+            { label: 'Company Information', to: '/employee' },
+            { label: 'Subsidiaries', to: '/fobech' },
           ],
         },
+        { label: 'Users/Roles', children: [{ label: 'Manage Roles', to: '/employee' }] },
+      ],
+    },
+    {
+      id: 'customization',
+      label: 'Customization',
+      items: [
+        {
+          label: 'Scripting',
+          children: [
+            { label: 'Scripts', to: '/colophon' },
+            { label: 'Script Deployments', to: '/colophon' },
+          ],
+        },
+        { label: 'Centers and Tabs', children: [{ label: 'Role Center Layout', to: '/' }] },
       ],
     },
     {
       id: 'support',
       label: 'Support',
-      columns: [
-        {
-          heading: 'Contact',
-          links: [
-            { label: 'New Message', to: '/contact', desc: 'Open a channel' },
-            { label: 'Email', href: 'mailto:rbetts@idamilk.com', desc: 'rbetts@idamilk.com' },
-            { label: 'GitHub', href: 'https://github.com/Riley-D-Betts', desc: '@Riley-D-Betts' },
-          ],
-        },
+      items: [
+        { label: 'New Message', to: '/contact' },
+        { label: 'Email rbetts@idamilk.com', href: 'mailto:rbetts@idamilk.com' },
+        { label: 'GitHub', href: 'https://github.com/Riley-D-Betts' },
+        { label: 'Fobech Studio', href: 'https://fobech.com' },
       ],
     },
+  ],
+
+  shortcutsMenu: [
+    { label: 'New Message', to: '/contact' },
+    { label: 'Employee Record', to: '/employee' },
+    { label: 'Employment History', to: '/positions' },
+    { label: 'Projects', to: '/projects' },
+    { label: 'Fobech Studio', href: 'https://fobech.com' },
+    { label: 'GitHub', href: 'https://github.com/Riley-D-Betts' },
+  ],
+
+  recentMenu: [
+    { label: 'Riley Betts (Employee)', to: '/employee' },
+    { label: 'Fobech (Subsidiary)', to: '/fobech' },
+    { label: 'SunApps MES (Project)', to: '/projects/sunapps-mes' },
+    { label: 'Ida Milk, LLC (Position)', to: '/positions/ida-milk' },
+    { label: 'KidCam (Project)', to: '/projects/kidcam' },
+    { label: 'How This Site Was Built (Script)', to: '/colophon' },
   ],
 
   dashboard: {

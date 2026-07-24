@@ -1,17 +1,16 @@
 <script setup lang="ts">
-defineProps<{ title: string; subtitle?: string; meta?: string }>()
+/** A list/page heading, styled like NetSuite's record-type heading. */
+defineProps<{ title: string; subtitle?: string }>()
 </script>
 
 <template>
-  <div class="ns-titlebar">
-    <div class="ns-titlebar__main">
-      <h1 class="ns-title">
-        {{ title }}<small v-if="meta">{{ meta }}</small>
-      </h1>
-      <p v-if="subtitle" class="ns-subtitle">{{ subtitle }}</p>
+  <div class="ns-pagetitle">
+    <div class="ns-pagetitle__first">
+      <h1 class="ns-record-type">{{ title }}</h1>
+      <div v-if="$slots.actions" class="ns-pagetitle__menu">
+        <slot name="actions" />
+      </div>
     </div>
-    <div v-if="$slots.actions" class="ns-titlebar__actions">
-      <slot name="actions" />
-    </div>
+    <p v-if="subtitle" class="ns-pagesub">{{ subtitle }}</p>
   </div>
 </template>

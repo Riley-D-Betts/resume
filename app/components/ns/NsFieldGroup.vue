@@ -9,8 +9,8 @@ function isInternal(href?: string): boolean {
 </script>
 
 <template>
+  <div class="ns-secbar">{{ group.title }}</div>
   <div class="ns-fieldgroup">
-    <div class="ns-fieldgroup__title">{{ group.title }}</div>
     <div class="ns-fields">
       <div v-for="f in group.fields" :key="f.label" class="ns-field">
         <div class="ns-field__label" :class="{ 'ns-field__label--help': f.help }" :title="f.help">
