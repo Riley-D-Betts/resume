@@ -11,27 +11,30 @@ export default defineNuxtConfig({
   },
 
   css: [
+    // Shared, kept for the private /ops console (dark CRT theme).
     '~/assets/css/tokens.css',
     '~/assets/css/base.css',
     '~/assets/css/crt.css',
+    // Public résumé — the NetSuite costume. Scoped under body.ns.
+    '~/assets/css/netsuite.css',
   ],
 
   app: {
     head: {
-      title: 'RILEY BETTS // OPS CONSOLE',
+      title: 'Riley Betts — Home | NetSuite',
       htmlAttrs: { lang: 'en' },
       meta: [
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
         {
           name: 'description',
           content:
-            'Riley Betts — IT Manager, Ida Milk (Suntado). The person who runs the systems that run a dairy plant. Founder, Fobech.',
+            'Riley Betts — IT Manager, Ida Milk (Suntado). A résumé built as a working mock NetSuite ERP account. Founder, Fobech.',
         },
-        { name: 'theme-color', content: '#070a0b' },
-        { property: 'og:title', content: 'RILEY BETTS // OPS CONSOLE' },
+        { name: 'theme-color', content: '#223140' },
+        { property: 'og:title', content: 'Riley Betts — NetSuite Personnel Account' },
         {
           property: 'og:description',
-          content: 'IT Manager. Systems builder. Founder of Fobech. This résumé has a boot sequence.',
+          content: 'IT Manager. Systems builder. Founder of Fobech. This résumé is a working mock NetSuite UI.',
         },
         { property: 'og:type', content: 'website' },
       ],
@@ -41,8 +44,8 @@ export default defineNuxtConfig({
 
   fonts: {
     families: [
-      { name: 'JetBrains Mono', provider: 'google', weights: [400, 500, 700] },
-      { name: 'Archivo Black', provider: 'google', weights: [400] },
+      { name: 'Open Sans', provider: 'google', weights: [400, 600, 700, 800] },
+      { name: 'JetBrains Mono', provider: 'google', weights: [400, 500] },
     ],
     defaults: { preload: true },
   },

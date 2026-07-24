@@ -3,90 +3,105 @@ import type { NuxtError } from '#app'
 
 const props = defineProps<{ error: NuxtError }>()
 
+// The error page renders outside the layout, so set the NetSuite theme
+// class on <body> here too.
+useHead({ bodyAttrs: { class: 'ns' }, title: `Error ${props.error.statusCode} | NetSuite` })
+
 const is404 = computed(() => props.error.statusCode === 404)
 </script>
 
 <template>
-  <main class="fault">
-    <div class="fault__panel">
-      <p class="fault__code display">{{ error.statusCode }}</p>
-      <p class="fault__title">
-        <span class="fault__lamp" aria-hidden="true" />
-        {{ is404 ? 'SIGNAL LOST — NO SUCH SEGMENT' : 'FAULT DETECTED — LINE STOPPED' }}
-      </p>
-      <p class="fault__hint label">
-        {{ is404 ? 'THE ROUTE YOU POLLED DOES NOT REPORT.' : 'AN OPERATOR HAS BEEN NOTIFIED. PROBABLY.' }}
-      </p>
-      <button class="fault__btn" @click="clearError({ redirect: '/' })">[ RETURN TO CONSOLE ]</button>
-    </div>
-  </main>
+  <div class="err">
+    <header class="err__mast">
+      <NuxtLink to="/" class="ns-logo">
+        <span class="ns-logo__tile">N</span>
+        <span class="ns-logo__word">Net<b>Suite</b></span>
+      </NuxtLink>
+    </header>
+
+    <main class="err__body">
+      <div class="err__card">
+        <div class="err__code">{{ error.statusCode }}</div>
+        <h1 class="err__title">{{ is404 ? 'Record Not Found' : 'System Error' }}</h1>
+        <p class="err__msg">
+          {{
+            is404
+              ? 'The record you requested doesn’t exist or has been removed. Check the URL, or head back to your Role Center.'
+              : 'Something went wrong on the server. An administrator has been notified (probably).'
+          }}
+        </p>
+        <div class="err__actions">
+          <button type="button" class="ns-btn ns-btn--primary" @click="clearError({ redirect: '/' })">
+            Return to Home
+          </button>
+          <NuxtLink to="/positions" class="ns-btn">Employment History</NuxtLink>
+          <NuxtLink to="/projects" class="ns-btn">Projects</NuxtLink>
+        </div>
+        <p class="err__ref">Error reference: NS-ERR-{{ error.statusCode }}</p>
+      </div>
+    </main>
+  </div>
 </template>
 
 <style scoped>
-.fault {
+.err {
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+.err__mast {
+  height: 46px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  background: linear-gradient(180deg, #2c3d4f, #223140);
+  border-bottom: 1px solid #17222e;
+}
+.err__body {
+  flex: 1;
   display: grid;
   place-items: center;
-  background: var(--bg-0);
-  font-family: var(--font-mono);
+  padding: 24px;
 }
-
-.fault__panel {
+.err__card {
+  width: min(520px, 100%);
+  background: #fff;
+  border: 1px solid var(--ns-border);
+  border-top: 3px solid var(--ns-brand);
+  border-radius: var(--ns-radius);
+  box-shadow: var(--ns-shadow);
+  padding: 30px 28px;
   text-align: center;
-  padding: var(--space-4);
 }
-
-.fault__code {
-  font-size: clamp(4rem, 18vw, 10rem);
-  color: var(--red);
-  opacity: 0.9;
+.err__code {
+  font-size: 56px;
+  font-weight: 800;
+  color: var(--ns-brand);
+  line-height: 1;
 }
-
-.fault__title {
-  margin-top: var(--space-2);
-  color: var(--text);
-  letter-spacing: 0.1em;
-  font-size: var(--fs-body);
+.err__title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ns-ink);
+  margin-top: 6px;
 }
-
-.fault__lamp {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--red);
-  box-shadow: 0 0 8px 2px rgba(255, 69, 69, 0.5);
-  animation: lamp-pulse 1.2s ease-in-out infinite;
-  margin-right: 6px;
+.err__msg {
+  color: var(--ns-ink-soft);
+  font-size: 13px;
+  margin: 10px auto 0;
+  max-width: 42ch;
 }
-
-@keyframes lamp-pulse {
-  50% {
-    opacity: 0.4;
-  }
+.err__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 20px;
 }
-
-.fault__hint {
-  margin-top: var(--space-2);
-}
-
-.fault__btn {
-  margin-top: var(--space-4);
-  border: 1px solid var(--hairline-lit);
-  color: var(--text);
-  padding: var(--space-2) var(--space-3);
-  letter-spacing: 0.08em;
-  transition: border-color 0.2s, color 0.2s;
-}
-
-.fault__btn:hover {
-  border-color: var(--teal-hot);
-  color: var(--teal-hot);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .fault__lamp {
-    animation: none;
-  }
+.err__ref {
+  margin-top: 18px;
+  font-size: 11px;
+  color: var(--ns-muted);
+  font-family: var(--ns-mono);
 }
 </style>
