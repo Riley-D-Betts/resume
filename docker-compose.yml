@@ -1,0 +1,20 @@
+services:
+  resume:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      # Both secrets are REQUIRED — copy .env.example to .env and fill them
+      # in. Compose refuses to start with a clear error if either is unset.
+      NUXT_ADMIN_PASSWORD: ${NUXT_ADMIN_PASSWORD:?NUXT_ADMIN_PASSWORD is required - copy .env.example to .env and set it}
+      NUXT_SESSION_PASSWORD: ${NUXT_SESSION_PASSWORD:?NUXT_SESSION_PASSWORD is required - copy .env.example to .env and set it (32+ chars)}
+      # Assumes a reverse proxy in front that sets X-Real-IP / X-Forwarded-For.
+      # Set to 'false' if you publish this port directly to the internet.
+      NUXT_TRUST_PROXY: 'true'
+    volumes:
+      # SQLite DB, session replays and the GeoIP database.
+      # The container runs as the unprivileged 'node' user (uid 1000), so
+      # create the host dir with matching ownership BEFORE first start:
+      #   mkdir -p ./data && sudo chown -R 1000:1000 ./data
+      - ./data:/data
+    restart: unless-stopped

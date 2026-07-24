@@ -70,6 +70,11 @@ button {
   cursor: pointer;
 }
 
+/* Anchor jumps must clear the fixed HUD bar. */
+[data-section] {
+  scroll-margin-top: calc(var(--hud-h) + 8px);
+}
+
 /* -- shared text utilities -------------------------------- */
 
 .label {
