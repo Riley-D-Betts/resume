@@ -13,8 +13,20 @@ const fobech = resume.fobech
 
 const root = ref<HTMLElement | null>(null)
 let ctx: { revert: () => void } | undefined
+let rejectNext = false
 
 const BOXES = [0, 1, 2, 3, 4]
+
+// hidden feature: clicking the QC gate arms a rejection for the next
+// box that reaches inspection
+function armReject() {
+  rejectNext = true
+  const lamp = root.value?.querySelector<SVGCircleElement>('.fobech__gate-lamp')
+  if (lamp) {
+    lamp.setAttribute('fill', 'var(--amber)')
+    setTimeout(() => lamp.setAttribute('fill', 'var(--red)'), 350)
+  }
+}
 
 onMounted(async () => {
   const el = root.value
@@ -122,8 +134,34 @@ onMounted(async () => {
           if (body) body.setAttribute('stroke', 'var(--amber)')
         })
         .to(box, { x: GATE_X, duration: 3.4, ease: 'none' })
-        // inspection: gate blinks, box flips green, then rolls on
+        // inspection: gate blinks, box flips green and rolls on —
+        // unless a rejection is armed, in which case it fails and
+        // drops off the belt
         .add(() => {
+          if (rejectNext) {
+            rejectNext = false
+            window.__rbTrack?.('easter_egg', 'qc-reject')
+            if (body) body.setAttribute('stroke', 'var(--red)')
+            if (gateLamp) {
+              gsap.fromTo(gateLamp, { attr: { fill: 'var(--red)' } }, { opacity: 0.2, duration: 0.1, repeat: 5, yoyo: true })
+            }
+            window.dispatchEvent(
+              new CustomEvent('rb:drill', { detail: 'QC HOLD — UNIT REJECTED. NOT EVERY CARTON MAKES IT.' }),
+            )
+            tl.pause()
+            gsap.to(box, {
+              y: 34,
+              rotation: 42,
+              autoAlpha: 0,
+              duration: 0.7,
+              ease: 'power2.in',
+              onComplete: () => {
+                gsap.set(box, { y: 0, rotation: 0, autoAlpha: 1 })
+                tl.restart(true)
+              },
+            })
+            return
+          }
           if (gateLamp) {
             gsap.fromTo(gateLamp, { attr: { fill: 'var(--red)' } }, { attr: { fill: 'var(--green)' }, duration: 0.25, ease: 'steps(2)' })
           }
@@ -187,6 +225,7 @@ onUnmounted(() => ctx?.revert())
           <path d="M288 52 v-30 h24 v30" />
         </g>
         <circle class="fobech__gate-lamp" cx="300" cy="16" r="3.5" fill="var(--red)" />
+        <rect class="fobech__gate-hit" x="282" y="4" width="36" height="50" fill="transparent" @click="armReject" />
         <text x="300" y="9" text-anchor="middle" fill="var(--text-faint)" font-size="7" font-family="var(--font-mono)">QC</text>
         <!-- boxes -->
         <g v-for="b in BOXES" :key="b" class="fobech__box">
@@ -325,6 +364,11 @@ onUnmounted(() => ctx?.revert())
   width: 100%;
   margin-top: var(--space-5);
   opacity: 0.85;
+}
+
+.fobech__gate-hit {
+  cursor: pointer;
+  pointer-events: all;
 }
 
 @media (prefers-reduced-motion: reduce) {

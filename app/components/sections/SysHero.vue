@@ -19,6 +19,20 @@ let onBoot: (() => void) | undefined
 onMounted(async () => {
   const el = root.value
   if (!el) return
+
+  // hidden features on the data rail: PWR cuts the plant power,
+  // UPTIME cycles its unit
+  el.querySelector('.hero__rail')?.addEventListener('click', (e) => {
+    const readout = (e.target as HTMLElement | null)?.closest('.readout')
+    const label = readout?.querySelector('.readout__label')?.textContent?.trim()
+    if (label === 'PWR') {
+      window.dispatchEvent(new CustomEvent('rb:egg-lights'))
+    } else if (label === 'UPTIME') {
+      cycleUptime()
+      window.__rbTrack?.('easter_egg', 'uptime-units')
+    }
+  })
+
   const [{ gsap }, { SplitText }, { ScrollTrigger }] = await Promise.all([
     import('gsap'),
     import('gsap/SplitText'),
