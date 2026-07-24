@@ -25,7 +25,12 @@ export default defineNuxtPlugin(() => {
   const epoch = new Date(`${resume.identity.hiredISO}T08:00:00-07:00`).getTime()
   window.ops = {
     help() {
-      return ['ops.uptime()  — career uptime', 'ops.hire()    — open a channel', 'ops.andon()   — run the drill']
+      return [
+        'ops.uptime()   — career uptime',
+        'ops.hire()     — open a channel',
+        'ops.andon()    — run the drill',
+        'ops.terminal() — the real maintenance interface (or press `)',
+      ]
     },
     uptime() {
       const days = ((Date.now() - epoch) / 86400000).toFixed(2)

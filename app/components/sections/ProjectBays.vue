@@ -13,6 +13,10 @@ const projects = resume.projects
 const root = ref<HTMLElement | null>(null)
 let ctx: { revert: () => void } | undefined
 
+function onShutter() {
+  window.dispatchEvent(new CustomEvent('rb:egg-shutter'))
+}
+
 onMounted(async () => {
   const el = root.value
   if (!el) return
@@ -174,6 +178,15 @@ onUnmounted(() => ctx?.revert())
             <circle class="bays__packet" cx="232" cy="75" r="2.2" />
             <circle class="bays__packet" cx="232" cy="110" r="2.2" />
           </g>
+          <!-- hidden feature: the lens takes a photo, firmware-style -->
+          <circle
+            class="bays__lens-hit"
+            cx="160"
+            cy="75"
+            r="34"
+            fill="transparent"
+            @click="onShutter"
+          />
           <g class="bays__schematic-labels" fill="var(--text-dim)" font-size="8" font-family="var(--font-mono)">
             <text x="240" y="36">BTN A/B</text>
             <text x="240" y="71">OV2640</text>
@@ -281,6 +294,10 @@ onUnmounted(() => ctx?.revert())
 .bays__schematic {
   width: min(100%, 340px);
   margin: var(--space-2) 0;
+}
+
+.bays__lens-hit {
+  cursor: pointer;
 }
 
 .bays__blurb {

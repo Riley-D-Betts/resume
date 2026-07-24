@@ -4,6 +4,8 @@
     <slot />
     <ScanlineOverlay />
     <CursorReticle />
+    <TerminalDrawer />
+    <EggOverlays />
   </div>
 </template>
 
