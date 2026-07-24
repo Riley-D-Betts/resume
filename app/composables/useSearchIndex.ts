@@ -47,9 +47,15 @@ export function useSearchIndex(): SearchHit[] {
   }
 
   hits.push({ type: 'Report', name: 'KPI Scorecard', to: '/', terms: 'kpi uptime spend headcount dashboard report scorecard' })
-  hits.push({ type: 'Page', name: 'Contact — New Message', to: '/contact', terms: 'contact email hire message reach out' })
-  hits.push({ type: 'List', name: 'Employment History', to: '/positions', terms: 'work history jobs positions career' })
-  hits.push({ type: 'List', name: 'Projects', to: '/projects', terms: 'projects side builds apps' })
+  hits.push({ type: 'Message', name: 'New Message', to: '/contact', terms: 'contact email hire message reach out support' })
+  hits.push({ type: 'List', name: 'Employment History', to: '/positions', terms: 'work history jobs positions career activities' })
+  hits.push({ type: 'List', name: 'Projects', to: '/projects', terms: 'projects side builds apps lists' })
+  hits.push({
+    type: 'Script',
+    name: 'How This Site Was Built',
+    to: '/colophon',
+    terms: 'colophon stack nuxt vue typescript sqlite docker customization scripting source',
+  })
 
   return hits
 }

@@ -41,12 +41,16 @@ body {
   color: #fff;
 }
 
-a {
+/* Scoped away from the public site: `body.ns` pages are the NetSuite
+   theme and get their link colour from netsuite.css. A bare `a` rule
+   here would out-specify that file's zero-specificity `:where()` base
+   and paint every unclassed public link CRT cyan. */
+body:not(.ns) a {
   color: var(--teal-hot);
   text-decoration: none;
 }
 
-a:hover {
+body:not(.ns) a:hover {
   text-decoration: underline;
   text-decoration-style: dotted;
 }

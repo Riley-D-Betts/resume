@@ -6,6 +6,10 @@ interface Item {
   toast?: string
 }
 
+/**
+ * NetSuite's "Actions" / "More" menu is a BORDERLESS text menu with a
+ * small triangle — not a bordered button.
+ */
 withDefaults(defineProps<{ label?: string; items: Item[] }>(), { label: 'Actions' })
 
 const open = ref(false)
@@ -30,8 +34,8 @@ onBeforeUnmount(() => document.removeEventListener('click', onDoc))
 
 <template>
   <div ref="root" class="ns-menu">
-    <button type="button" class="ns-btn" :aria-expanded="open" @click.stop="open = !open">
-      {{ label }} <span class="ns-btn__caret" aria-hidden="true">▾</span>
+    <button type="button" class="ns-menu__btn" :aria-expanded="open" @click.stop="open = !open">
+      {{ label }}<span class="ns-menu__tri" aria-hidden="true">▼</span>
     </button>
     <div v-if="open" class="ns-menu__list">
       <button v-for="it in items" :key="it.label" type="button" class="ns-menu__item" @click="pick(it)">

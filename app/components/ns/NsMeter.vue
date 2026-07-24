@@ -32,19 +32,12 @@ const needle = computed(() => {
 <template>
   <div class="ns-meter">
     <svg viewBox="0 0 200 118" width="100%" height="118" role="img" :aria-label="`${label}: ${value}`">
-      <defs>
-        <linearGradient id="ns-meter-grad" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0" stop-color="#4aa3df" />
-          <stop offset="1" stop-color="#2f6cab" />
-        </linearGradient>
-      </defs>
-      <path d="M20,100 A80,80 0 0 1 180,100" fill="none" stroke="#dde3ea" stroke-width="16" stroke-linecap="round" />
+      <path d="M20,100 A80,80 0 0 1 180,100" fill="none" stroke="#dfe4eb" stroke-width="16" />
       <path
         d="M20,100 A80,80 0 0 1 180,100"
         fill="none"
-        stroke="url(#ns-meter-grad)"
+        stroke="#607799"
         stroke-width="16"
-        stroke-linecap="round"
         :stroke-dasharray="dash"
         style="transition: stroke-dasharray 1.1s cubic-bezier(0.22, 1, 0.36, 1)"
       />
@@ -53,14 +46,14 @@ const needle = computed(() => {
         y1="100"
         :x2="needle.x"
         :y2="needle.y"
-        stroke="#33475b"
+        stroke="#4d5f7a"
         stroke-width="3"
         stroke-linecap="round"
         style="transition: all 1.1s cubic-bezier(0.22, 1, 0.36, 1)"
       />
-      <circle cx="100" cy="100" r="6" fill="#33475b" />
-      <text x="20" y="114" font-size="9" fill="#7d8b99">{{ min }}</text>
-      <text x="180" y="114" font-size="9" fill="#7d8b99" text-anchor="end">{{ max }}</text>
+      <circle cx="100" cy="100" r="6" fill="#4d5f7a" />
+      <text x="20" y="114" font-size="9" fill="#777777">{{ min }}</text>
+      <text x="180" y="114" font-size="9" fill="#777777" text-anchor="end">{{ max }}</text>
     </svg>
     <div class="ns-meter__val">{{ value }}</div>
     <div class="ns-meter__label">{{ label }}</div>

@@ -30,22 +30,20 @@ const active = ref(props.points.length - 1)
 <template>
   <div class="ns-trend">
     <svg viewBox="0 0 300 116" width="100%" height="116" role="img" :aria-label="title">
-      <defs>
-        <linearGradient id="ns-trend-fill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#2f6cab" stop-opacity="0.28" />
-          <stop offset="1" stop-color="#2f6cab" stop-opacity="0.02" />
-        </linearGradient>
-      </defs>
-      <path :d="areaPath" fill="url(#ns-trend-fill)" />
-      <path :d="linePath" fill="none" stroke="#2f6cab" stroke-width="2" stroke-linejoin="round" />
+      <!-- plot frame + gridlines, like NetSuite's trend graph -->
+      <rect x="10" y="12" width="280" height="82" fill="none" stroke="#dfe4eb" stroke-width="1" />
+      <line x1="10" y1="39" x2="290" y2="39" stroke="#eff1f5" stroke-width="1" />
+      <line x1="10" y1="66" x2="290" y2="66" stroke="#eff1f5" stroke-width="1" />
+      <path :d="areaPath" fill="#607799" fill-opacity="0.12" />
+      <path :d="linePath" fill="none" stroke="#607799" stroke-width="2" stroke-linejoin="round" />
       <g v-for="(c, i) in coords" :key="i">
-        <text :x="c.x" :y="H - 7" font-size="9" fill="#7d8b99" text-anchor="middle">{{ c.p.label }}</text>
+        <text :x="c.x" :y="H - 7" font-size="9" fill="#777777" text-anchor="middle">{{ c.p.label }}</text>
         <circle
           :cx="c.x"
           :cy="c.y"
           :r="active === i ? 5 : 3"
-          :fill="active === i ? '#2f6cab' : '#fff'"
-          stroke="#2f6cab"
+          :fill="active === i ? '#607799' : '#fff'"
+          stroke="#607799"
           stroke-width="2"
           style="cursor: pointer"
           @mouseenter="active = i"
