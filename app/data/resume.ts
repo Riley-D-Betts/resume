@@ -175,9 +175,9 @@ export const resume: ResumeContent = {
     header: 'OPERATOR PROFILE',
     fileTag: 'PERSONNEL FILE: BETTS, R.',
     paragraphs: [
-      'I run IT for a dairy manufacturer. That sentence undersells it: at a plant that fills millions of units, "IT" means the ERP, the network, the servers, the cameras, the help desk, the dashboards on the floor, and the B2B pipes that keep trucks arriving — all of it, all at once.',
-      'I got here by building. When something was missing — a training system, document control, an MES, a way for partners to talk to us — the answer was rarely a purchase order. Most of it I built, or it got built under my direction, for close to zero dollars. The department itself started as one person keeping a very long list. Now it is a team, and the list is a system.',
-      'Off the clock the habit does not switch off. I build cameras for my kids, dashboards for my house, and manufacturing software for other plants through my studio, Fobech. I like systems that tell the truth, tools that fit the hand that uses them, and uptime numbers with more nines than complaints.',
+      'I run IT for a dairy manufacturer. That sentence undersells it. At a plant filling millions of units, "IT" means the ERP, the network, the servers, the cameras, the help desk, the dashboards on the floor, and the B2B pipes that keep trucks arriving.',
+      'I got here by building. When the plant needed something that did not exist yet, a training system or document control or a way for partners to talk to us, the answer was rarely a purchase order. Most of it I built myself, or it got built under my direction, for close to zero dollars. The department started as one person keeping a very long list. The list eventually became a system, and the one person got to hire help.',
+      'The habit does not switch off at home. I build cameras for my kids, a wall dashboard for my kitchen, and manufacturing software for other plants through my studio, Fobech. If a tool does not fit the hand that uses it, I take that personally.',
     ],
     operatorClass: 'SYSTEMS / INFRASTRUCTURE / AUTOMATION',
     clearances: ['ERP: ADMIN', 'NET: ROOT', 'FLOOR: ALL LINES', 'BUDGET: $0 PREFERRED'],
@@ -196,6 +196,43 @@ export const resume: ResumeContent = {
   },
 
   roles: [
+    // start/end are not rendered anywhere — array order drives the timeline.
+    {
+      org: 'BIG DOG SOLAR',
+      aka: 'THE SOLAR YEARS',
+      location: 'CHUBBUCK / POCATELLO, IDAHO',
+      start: '2016-01-01',
+      end: '2019-12-31',
+      titles: [
+        { title: 'SOLAR APPOINTMENT SETTER', period: 'THE PHONES' },
+        { title: 'PERMIT / SYSTEM DESIGNER', period: 'THE DRAFTING TABLE' },
+        { title: 'BUSINESS SYSTEMS ADMINISTRATOR', period: 'THE SERVER ROOM' },
+      ],
+      summary:
+        'Residential and commercial solar out of southeast Idaho. Started on the phones, ended up running the software that ran the company.',
+      logLines: [
+        { text: 'STARTED ON THE PHONES — QUALIFIED LEADS, EXPLAINED SOLAR TO HOMEOWNERS', stamp: 'HIRED' },
+        { text: 'MOVED TO DESIGN — RESIDENTIAL PERMITS AND ONE-LINE DIAGRAMS, DRAWN TO CODE IN AUTOCAD', stamp: 'OK' },
+        { text: 'PROMOTED TO BUSINESS SYSTEMS ADMINISTRATOR — HARDWARE, SOFTWARE, NETSUITE', stamp: 'PROMOTED' },
+        { text: 'FIRST CONTACT WITH NETSUITE — THE OBSESSION BEGINS', stamp: 'OK' },
+      ],
+      tags: ['AUTOCAD', 'NETSUITE', 'SOLAR', 'PERMITS', 'SALES'],
+    },
+    {
+      org: 'RYMER TECHNOLOGIES',
+      aka: 'THE MSP YEARS',
+      location: 'IDAHO FALLS, IDAHO',
+      start: '2020-01-01',
+      end: '2024-11-01',
+      titles: [{ title: 'SYSTEMS ADMINISTRATOR', period: 'MANY NETWORKS, ONE SYSADMIN' }],
+      summary:
+        'Managed IT and custom software delivery for small businesses across Southern Idaho. Every client ran a different stack, and something was always on fire somewhere.',
+      logLines: [
+        { text: 'CLIENT NETWORKS, SERVERS, AND BACKUPS ACROSS SOUTHERN IDAHO', stamp: 'OK' },
+        { text: 'CUSTOM SOFTWARE + IT SERVICE DELIVERY AT SMALL-BUSINESS SCALE', stamp: 'OK' },
+      ],
+      tags: ['MSP', 'WINDOWS SERVER', 'NETWORKING', 'BACKUP / DR'],
+    },
     {
       org: 'IDA MILK, LLC',
       aka: 'OPERATING AS SUNTADO',
@@ -243,13 +280,13 @@ export const resume: ResumeContent = {
     logo: '/fobech/logo.svg',
     taglines: ['Complexity Is Our Problem. Not Yours.', "We build what off-the-shelf can't."],
     blurb:
-      'Fobech is my software studio. It exists because food & beverage manufacturers keep buying software that almost fits — and then bending the plant around the software. Fobech bends the software around the plant: manufacturing execution, lot traceability that runs both directions, QC gating that actually gates, and Andon boards that tell the floor the truth in real time.',
+      'Fobech is my software studio. It exists because food & beverage manufacturers keep buying software that almost fits, then bending the plant around the software. Fobech bends the software around the plant: manufacturing execution, lot traceability that runs both directions, QC gating that actually gates, and Andon boards that tell the floor the truth in real time.',
     cta: 'ESTABLISH LINK → FOBECH.COM',
     capabilities: [
       { title: 'MES', desc: 'WORK ORDERS · STATION OPS · LINE STATE' },
       { title: 'LOT TRACEABILITY', desc: 'FORWARD + BACKWARD · INSTANT RECALL SCOPE' },
       { title: 'QC HOLD / RELEASE', desc: 'GATED FLOW · NOTHING SHIPS ON A GUESS' },
-      { title: 'ANDON / LIVE STATUS', desc: 'REAL-TIME BOARDS · THE FLOOR SEES THE TRUTH' },
+      { title: 'ANDON / LIVE STATUS', desc: 'LIVE BOARDS · NO MASSAGED NUMBERS' },
     ],
   },
 
@@ -273,7 +310,7 @@ export const resume: ResumeContent = {
       status: 'ACTIVE DEV',
       statusLamp: 'green',
       blurb:
-        'Manufacturing execution built next to a real production floor — work orders, station operations, and line status that operators actually use. The proving ground for the ideas Fobech ships.',
+        'Manufacturing execution built next to a real production floor: work orders, station operations, and line status that operators actually use. The proving ground for the ideas Fobech ships.',
       specs: ['MES', 'WORK ORDERS', 'LINE STATUS', 'SHOP-FLOOR UI'],
       links: [{ label: 'GITHUB ↗', href: 'https://github.com/Riley-D-Betts/SunApps_MES' }],
     },
@@ -284,7 +321,7 @@ export const resume: ResumeContent = {
       status: 'ONLINE',
       statusLamp: 'green',
       blurb:
-        'The household ops board: family calendar with real recurrence rules, chores with a rewards store the kids actually check, recipes → meal plans → an aisle-sorted shopping list, a barcode-scanned pantry, and a photo frame for the kitchen tablet — one Docker container, with a documented REST API so Home Assistant can join the family.',
+        'The household ops board: family calendar with real recurrence rules, chores with a rewards store the kids actually check, recipes that turn into meal plans and aisle-sorted shopping lists, a barcode-scanned pantry, and a photo frame for the kitchen tablet. It runs as one Docker container and speaks a documented REST API, so Home Assistant can join the family.',
       specs: ['NUXT 4', 'SQLITE + DRIZZLE', 'PWA', 'WEB PUSH', 'REST + OPENAPI', 'HOME ASSISTANT'],
       links: [{ label: 'GITHUB ↗', href: 'https://github.com/Riley-D-Betts/betts-board' }],
     },
@@ -309,7 +346,7 @@ export const resume: ResumeContent = {
       status: 'ONLINE',
       statusLamp: 'green',
       blurb:
-        'A drawing studio for artists aged two to eight. Tap your animal to sign in — no logins, no ads — then crayons, sparkles, stamps, and a flood-fill bucket that respects the lines. Turns any photo into a coloring page, saves every masterpiece to the family server, and guards the delete button with a multiplication problem.',
+        'A drawing studio for artists aged two to eight, with no logins and no ads. Kids tap their animal to sign in, then get crayons, sparkles, stamps, and a flood-fill bucket that respects the lines. Any photo can become a coloring page. Every masterpiece lands on the family server, where the delete button hides behind a multiplication problem.',
       specs: ['NUXT 4', 'CANVAS', 'FLOOD FILL', 'PHOTO → LINE ART', 'SELF-HOSTED'],
       links: [{ label: 'GITHUB ↗', href: 'https://github.com/Riley-D-Betts/draw' }],
     },
@@ -327,7 +364,7 @@ export const resume: ResumeContent = {
     ],
     footer: '© 2026 RILEY BETTS · BUILT WITH NUXT + GSAP · NO TEMPLATES HARMED',
     privacyNotice:
-      'THIS SITE RUNS SELF-HOSTED FIRST-PARTY ANALYTICS INCL. SESSION REPLAY — NO THIRD PARTIES, NO ADS, DATA STAYS ON MY SERVER.',
+      'THIS SITE RUNS SELF-HOSTED FIRST-PARTY ANALYTICS, INCLUDING SESSION REPLAY. NO THIRD PARTIES. DATA STAYS ON MY SERVER.',
   },
 
   eggs: {
