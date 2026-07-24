@@ -1,0 +1,69 @@
+<script setup lang="ts">
+const props = defineProps<{
+  label: string
+  value: string
+  percent: number
+  min: number
+  max: number
+  target: string
+}>()
+
+// upper-semicircle gauge: M20,100 A80,80 0 0 1 180,100  (length = π·80)
+const ARC = Math.PI * 80
+
+const fraction = computed(() => {
+  const f = (props.percent - props.min) / (props.max - props.min)
+  return Math.max(0, Math.min(1, f))
+})
+
+// animate the fill in after mount
+const shown = ref(false)
+onMounted(() => requestAnimationFrame(() => (shown.value = true)))
+
+const dash = computed(() => `${(shown.value ? fraction.value : 0) * ARC} ${ARC}`)
+
+// needle endpoint (θ measured from +x axis, 180°→0° across the top)
+const needle = computed(() => {
+  const theta = Math.PI * (1 - (shown.value ? fraction.value : 0))
+  return { x: 100 + 66 * Math.cos(theta), y: 100 - 66 * Math.sin(theta) }
+})
+</script>
+
+<template>
+  <div class="ns-meter">
+    <svg viewBox="0 0 200 118" width="100%" height="118" role="img" :aria-label="`${label}: ${value}`">
+      <defs>
+        <linearGradient id="ns-meter-grad" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#4aa3df" />
+          <stop offset="1" stop-color="#2f6cab" />
+        </linearGradient>
+      </defs>
+      <path d="M20,100 A80,80 0 0 1 180,100" fill="none" stroke="#dde3ea" stroke-width="16" stroke-linecap="round" />
+      <path
+        d="M20,100 A80,80 0 0 1 180,100"
+        fill="none"
+        stroke="url(#ns-meter-grad)"
+        stroke-width="16"
+        stroke-linecap="round"
+        :stroke-dasharray="dash"
+        style="transition: stroke-dasharray 1.1s cubic-bezier(0.22, 1, 0.36, 1)"
+      />
+      <line
+        x1="100"
+        y1="100"
+        :x2="needle.x"
+        :y2="needle.y"
+        stroke="#33475b"
+        stroke-width="3"
+        stroke-linecap="round"
+        style="transition: all 1.1s cubic-bezier(0.22, 1, 0.36, 1)"
+      />
+      <circle cx="100" cy="100" r="6" fill="#33475b" />
+      <text x="20" y="114" font-size="9" fill="#7d8b99">{{ min }}</text>
+      <text x="180" y="114" font-size="9" fill="#7d8b99" text-anchor="end">{{ max }}</text>
+    </svg>
+    <div class="ns-meter__val">{{ value }}</div>
+    <div class="ns-meter__label">{{ label }}</div>
+    <div class="ns-meter__target">{{ target }}</div>
+  </div>
+</template>

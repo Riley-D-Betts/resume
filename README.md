@@ -1,13 +1,24 @@
-# RILEY BETTS // OPS CONSOLE
+# RILEY BETTS — RÉSUMÉ (MOCK NETSUITE UI)
 
-A one-page résumé built like a mission-control terminal: boot sequence,
-status lamps, section-by-section telemetry. Underneath it runs its own
-first-party analytics pipeline, session replay included. No third-party
-trackers, nothing leaves the box. One Node process, one SQLite file.
+A résumé built as a working mock NetSuite ERP account. The career is
+presented the way NetSuite would present it: a Home dashboard of portlets
+(KPIs, a gauge, a trend graph, reminders, recent records), an Employee
+record with subtabs, an Employment History list, Project records and a
+Fobech "subsidiary". Global search, dropdown menus, sortable lists,
+collapsible portlets and a contact "message" form all function.
+
+Underneath it runs its own first-party analytics pipeline, session replay
+included. No third-party trackers, nothing leaves the box. One Node
+process, one SQLite file.
 
 | Route | What |
 | --- | --- |
-| `/` | the résumé itself (Nuxt 4, GSAP choreography) |
+| `/` | Home dashboard (Nuxt 4, SSR) |
+| `/employee` | the Employee record — bio, skills matrix, contact |
+| `/positions`, `/positions/:id` | Employment History list + Position records |
+| `/projects`, `/projects/:id` | Projects list + Project records |
+| `/fobech` | the Fobech subsidiary record |
+| `/contact` | compose a message (opens your mail client) |
 | `/ops` | admin console: traffic overview, session explorer, rrweb replay player |
 | `POST /api/collect`, `POST /api/replay` | telemetry intake |
 | `GET /api/health` | liveness |
@@ -25,11 +36,15 @@ Dev mode runs without secrets. A production build refuses to boot until
 ## SEG 02 // EDITING CONTENT
 
 Every word on the page lives in `app/data/resume.ts`, the single source of
-truth. Name, hero copy, work history, the Fobech panel, project bays,
-contact links: edit that one typed file and the site follows.
+truth, shaped as NetSuite records: the account/masthead, the Employee
+record and its skills, dashboard KPIs/meter/trend/reminders, the work
+history positions, project records, the Fobech subsidiary and contact
+details. Edit that one typed file and the site follows.
 
 Components never hardcode copy; if you want to change what the site says,
-you never have to touch a `.vue` file.
+you never have to touch a `.vue` file. The NetSuite look lives in
+`app/assets/css/netsuite.css` (scoped under `body.ns`); the private `/ops`
+console keeps its own dark theme from `tokens.css` / `base.css`.
 
 ## SEG 03 // BUILD & SELF-HOST (BARE)
 
@@ -127,8 +142,7 @@ Pageviews (referrer, UTM, screen/viewport, timezone, language, device
 hints), per-section enter/exit with dwell time, scroll-depth milestones,
 clicks, outbound link clicks, device + geo (city level), web vitals
 (TTFB/LCP/CLS/INP), JS errors, active-time heartbeats (each one is 15s of
-visible, non-idle time), boot completion/skip, easter eggs, and sampled
-rrweb session replay.
+visible, non-idle time), easter eggs, and sampled rrweb session replay.
 
 ### Where it lives
 
@@ -200,10 +214,11 @@ NUXT_ADMIN_PASSWORD=test NUXT_SESSION_PASSWORD="$(openssl rand -hex 32)" npm run
 npx playwright test -c tests
 ```
 
-Covers the public page (boot, all six sections, console-error-free, reduced
-motion), the analytics pipeline (a real browsed session asserted straight
-from SQLite, replay chunk included) and the `/ops` console (login gate,
-overview, session detail, replay player) on desktop and mobile viewports.
+Covers the public site (dashboard portlets render, record-to-record
+navigation, subtab switching, console-error-free, reduced motion), the
+analytics pipeline (a real browsed session asserted straight from SQLite,
+replay chunk included) and the `/ops` console (login gate, overview,
+session detail, replay player) on desktop and mobile viewports.
 Screenshots land in `test-results/screens/`. `BASE_URL`, `OPS_PASSWORD` and
 `DATA_DIR` env vars retarget the suite.
 
@@ -216,9 +231,11 @@ Screenshots land in `test-results/screens/`. `BASE_URL`, `OPS_PASSWORD` and
 - GEO OFFLINE in /ops: the GeoLite2 download hasn't finished or the box has
   no outbound network. Analytics still works; geo columns stay null. Fix by
   allowing the download or setting `NUXT_GEOIP_MMDB_PATH`.
-- **Blank/instant page with JS blocked** — expected. The page is
-  server-rendered; content renders without JavaScript, you just lose the
-  boot sequence and animations (and analytics, which is rather the point).
+- **Reduced interactivity with JS blocked** — expected. The pages are
+  server-rendered; records, lists and the dashboard render without
+  JavaScript. You just lose the interactive bits — global search, menu
+  dropdowns, list sorting, subtab switching, the loading splash (and
+  analytics, which is rather the point).
 - **429s from /api/collect** — per-IP rate limit (60/min). Normal browsing
   never hits it; the seed script does so deliberately as its last step.
 - **Prod build exits immediately at boot** — read the error: missing
