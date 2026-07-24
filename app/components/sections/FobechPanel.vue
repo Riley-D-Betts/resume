@@ -2,20 +2,24 @@
 import { resume } from '~/data/resume'
 
 /**
- * SEG 04 — FOBECH. The inversion moment: the page washes deep teal
- * while the studio panel is on screen. The capability tiles ARE Andon
- * tiles — they enter RED/HOLD and flip GREEN/RELEASED as they cross
- * the trigger line, because QC gating is literally what Fobech builds.
+ * SEG 04 — FOBECH. The inversion moment: the page washes deep teal,
+ * the tagline rises word by word and underlines itself, and the four
+ * capability tiles flip RED/HOLD → GREEN/RELEASED as they cross the
+ * trigger line. Underneath it all runs a miniature production line:
+ * boxes ride a conveyor to a QC gate, pause for inspection, flip
+ * green, and roll on. Hovering a released tile re-inspects it.
  */
 const fobech = resume.fobech
 
 const root = ref<HTMLElement | null>(null)
 let ctx: { revert: () => void } | undefined
 
+const BOXES = [0, 1, 2, 3, 4]
+
 onMounted(async () => {
   const el = root.value
   if (!el) return
-  const [{ gsap }, { SplitText }] = await Promise.all([
+  const [{ gsap }, { SplitText }, { ScrollTrigger }] = await Promise.all([
     import('gsap'),
     import('gsap/SplitText'),
     import('gsap/ScrollTrigger'),
@@ -27,14 +31,14 @@ onMounted(async () => {
   mm.add('(prefers-reduced-motion: no-preference)', async () => {
     await document.fonts.ready
 
-    // teal wash while the section holds the viewport
+    // -- teal wash while the section holds the viewport ----
     const wash = gsap.to(el, {
       backgroundColor: '#012a31',
       duration: 0.7,
       ease: 'power1.inOut',
       paused: true,
     })
-    const washTrigger = {
+    ScrollTrigger.create({
       trigger: el,
       start: 'top 65%',
       end: 'bottom 35%',
@@ -42,23 +46,26 @@ onMounted(async () => {
       onLeave: () => wash.reverse(),
       onEnterBack: () => wash.play(),
       onLeaveBack: () => wash.reverse(),
-    }
-    gsap.timeline({ scrollTrigger: washTrigger })
+    })
 
-    // taglines rise word by word
+    // -- tagline rises, then underlines itself -------------
     const tagline = el.querySelector('.fobech__tagline')
+    const underline = el.querySelector('.fobech__underline')
     if (tagline) {
       const split = new SplitText(tagline, { type: 'words', wordsClass: 'fobech__word' })
       gsap.set(split.words, { yPercent: 120, autoAlpha: 0, rotate: 2 })
-      gsap.to(split.words, {
+      gsap.set(underline, { scaleX: 0, transformOrigin: '0 50%' })
+      const tl = gsap.timeline({
+        scrollTrigger: { trigger: tagline, start: 'top 78%', once: true },
+      })
+      tl.to(split.words, {
         yPercent: 0,
         autoAlpha: 1,
         rotate: 0,
         duration: 0.7,
-        ease: 'power3.out',
+        ease: 'console',
         stagger: 0.06,
-        scrollTrigger: { trigger: tagline, start: 'top 78%', once: true },
-      })
+      }).to(underline, { scaleX: 1, duration: 0.5, ease: 'console' }, '-=0.2')
     }
 
     const intro = el.querySelectorAll('.fobech__logo, .fobech__sub, .fobech__blurb, .fobech__cta')
@@ -71,7 +78,15 @@ onMounted(async () => {
       scrollTrigger: { trigger: el, start: 'top 65%', once: true },
     })
 
-    // Andon tiles: RED — HOLD → GREEN — RELEASED
+    // -- Andon tiles: RED/HOLD → GREEN/RELEASED ------------
+    const reinspect = (tile: HTMLElement) => {
+      const statusEl = tile.querySelector<HTMLElement>('.fobech__tile-status')
+      const lampEl = tile.querySelector<HTMLElement>('.lamp')
+      if (!tile.classList.contains('fobech__tile--released') || !statusEl) return
+      gsap.to(statusEl, { duration: 0.35, scrambleText: { text: 'RELEASED', chars: 'HOLDREL▮', speed: 2.4 } })
+      if (lampEl) gsap.fromTo(lampEl, { opacity: 0.2 }, { opacity: 1, duration: 0.09, repeat: 3, yoyo: true })
+    }
+
     el.querySelectorAll<HTMLElement>('.fobech__tile').forEach((tile, i) => {
       const statusEl = tile.querySelector<HTMLElement>('.fobech__tile-status')
       const lampEl = tile.querySelector<HTMLElement>('.lamp')
@@ -79,7 +94,7 @@ onMounted(async () => {
       const tl = gsap.timeline({
         scrollTrigger: { trigger: tile, start: 'top 80%', once: true },
       })
-      tl.to(tile, { autoAlpha: 1, y: 0, duration: 0.4, delay: i * 0.12 })
+      tl.to(tile, { autoAlpha: 1, y: 0, duration: 0.4, delay: i * 0.12, ease: 'console' })
         .to(tile, { '--tile-flash': 0.35, duration: 0.08, yoyo: true, repeat: 1 } as gsap.TweenVars, '+=0.4')
         .add(() => {
           tile.classList.add('fobech__tile--released')
@@ -91,7 +106,41 @@ onMounted(async () => {
             })
           }
         }, '<')
+      tile.addEventListener('pointerenter', () => reinspect(tile))
     })
+
+    // -- the conveyor ---------------------------------------
+    const gateLamp = el.querySelector<SVGCircleElement>('.fobech__gate-lamp')
+    const boxTls: gsap.core.Timeline[] = []
+    el.querySelectorAll<SVGGElement>('.fobech__box').forEach((box, i) => {
+      const body = box.querySelector<SVGRectElement>('rect')
+      const GATE_X = 292
+      const END_X = 640
+      const tl = gsap.timeline({ repeat: -1, delay: i * 2.1, paused: true })
+      tl.set(box, { x: -40 })
+        .add(() => {
+          if (body) body.setAttribute('stroke', 'var(--amber)')
+        })
+        .to(box, { x: GATE_X, duration: 3.4, ease: 'none' })
+        // inspection: gate blinks, box flips green, then rolls on
+        .add(() => {
+          if (gateLamp) {
+            gsap.fromTo(gateLamp, { attr: { fill: 'var(--red)' } }, { attr: { fill: 'var(--green)' }, duration: 0.25, ease: 'steps(2)' })
+          }
+          if (body) body.setAttribute('stroke', 'var(--green)')
+        })
+        .to(box, { x: GATE_X, duration: 0.35 })
+        .to(box, { x: END_X, duration: 3.6, ease: 'none' })
+      boxTls.push(tl)
+    })
+    ScrollTrigger.create({
+      trigger: el.querySelector('.fobech__conveyor'),
+      start: 'top bottom',
+      end: 'bottom top',
+      onToggle: (self) => boxTls.forEach((t) => (self.isActive ? t.play() : t.pause())),
+    })
+
+    return () => boxTls.forEach((t) => t.kill())
   })
 })
 
@@ -107,6 +156,7 @@ onUnmounted(() => ctx?.revert())
         <div class="fobech__pitch">
           <img class="fobech__logo" :src="fobech.logo" alt="Fobech logo" width="220" height="56" />
           <h3 class="fobech__tagline display">{{ fobech.taglines[0] }}</h3>
+          <div class="fobech__underline" aria-hidden="true" />
           <p class="fobech__sub">{{ fobech.taglines[1] }}</p>
           <p class="fobech__blurb">{{ fobech.blurb }}</p>
           <a class="fobech__cta" :href="fobech.url" target="_blank" rel="noopener">
@@ -125,6 +175,25 @@ onUnmounted(() => ctx?.revert())
           </div>
         </div>
       </div>
+
+      <svg class="fobech__conveyor" viewBox="0 0 600 64" aria-hidden="true" preserveAspectRatio="xMidYMid meet">
+        <!-- belt + rollers -->
+        <line x1="0" y1="52" x2="600" y2="52" stroke="var(--hairline-lit)" stroke-width="1.5" />
+        <g fill="none" stroke="var(--hairline)" stroke-width="1">
+          <circle v-for="n in 15" :key="n" :cx="n * 40 - 20" cy="57" r="3" />
+        </g>
+        <!-- QC gate -->
+        <g fill="none" stroke="var(--teal-hot)" stroke-width="1.5">
+          <path d="M288 52 v-30 h24 v30" />
+        </g>
+        <circle class="fobech__gate-lamp" cx="300" cy="16" r="3.5" fill="var(--red)" />
+        <text x="300" y="9" text-anchor="middle" fill="var(--text-faint)" font-size="7" font-family="var(--font-mono)">QC</text>
+        <!-- boxes -->
+        <g v-for="b in BOXES" :key="b" class="fobech__box">
+          <rect x="-8" y="36" width="16" height="14" fill="var(--bg-2)" stroke="var(--amber)" stroke-width="1.5" />
+          <line x1="-8" y1="43" x2="8" y2="43" stroke="var(--hairline-lit)" stroke-width="1" />
+        </g>
+      </svg>
     </div>
   </div>
 </template>
@@ -137,7 +206,7 @@ onUnmounted(() => ctx?.revert())
 .fobech__inner {
   max-width: 1180px;
   margin: 0 auto;
-  padding: var(--space-6) var(--space-4);
+  padding: var(--space-6) var(--space-4) var(--space-4);
 }
 
 .fobech__cols {
@@ -162,6 +231,13 @@ onUnmounted(() => ctx?.revert())
 
 .fobech__tagline :deep(.fobech__word) {
   display: inline-block;
+}
+
+.fobech__underline {
+  height: 2px;
+  width: min(320px, 70%);
+  background: linear-gradient(to right, var(--teal-hot), transparent);
+  margin-bottom: var(--space-3);
 }
 
 .fobech__sub {
@@ -244,9 +320,22 @@ onUnmounted(() => ctx?.revert())
   line-height: 1.7;
 }
 
+.fobech__conveyor {
+  display: block;
+  width: 100%;
+  margin-top: var(--space-5);
+  opacity: 0.85;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fobech__conveyor {
+    display: none;
+  }
+}
+
 @media (max-width: 900px) {
   .fobech__inner {
-    padding: var(--space-5) var(--space-3);
+    padding: var(--space-5) var(--space-3) var(--space-3);
   }
 
   .fobech__cols {
