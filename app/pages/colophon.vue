@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { resume } from '~/data/resume'
-
 useHead({ title: 'Script: How This Site Was Built | NetSuite' })
 
 const toast = useToast()
@@ -36,15 +34,12 @@ const sublist = [
 
 <template>
   <div data-section="colophon">
-    <NsBreadcrumb
-      :items="[{ label: 'Home', to: '/' }, { label: 'Customization' }, { label: 'Scripting' }, { label: 'How This Site Was Built' }]"
-    />
 
     <NsRecordHeader
       type="Script"
       name="customscript_resume_netsuite"
       record-id="1"
-      glyph="📄"
+     
       status-label="Released"
     >
       <template #actions>
@@ -62,7 +57,7 @@ const sublist = [
 
     <NsSubtabs :tabs="['Notes', 'Files', 'Deployments']" v-slot="{ active }">
         <div v-show="active === 0" class="ns-subpanel">
-          <div class="ns-prose" style="max-width: 76ch">
+          <div class="ns-prose">
             <p v-for="(n, i) in notes" :key="i">{{ n }}</p>
           </div>
         </div>
@@ -78,7 +73,7 @@ const sublist = [
               </thead>
               <tbody>
                 <tr v-for="(s, i) in sublist" :key="s.file">
-                  <td class="ns-mono">{{ s.file }}</td>
+                  <td>{{ s.file }}</td>
                   <td>{{ s.role }}</td>
                 </tr>
               </tbody>
@@ -98,12 +93,12 @@ const sublist = [
               </thead>
               <tbody>
                 <tr>
-                  <td class="ns-mono">/ — Role Center</td>
+                  <td>/ — Role Center</td>
                   <td>All Roles</td>
                   <td><NsStatusPill tone="green" label="Released" /></td>
                 </tr>
                 <tr>
-                  <td class="ns-mono">/ops — Analytics Console</td>
+                  <td>/ops — Analytics Console</td>
                   <td>Administrator</td>
                   <td><NsStatusPill tone="amber" label="Password Gated" /></td>
                 </tr>
@@ -115,8 +110,6 @@ const sublist = [
 
     <div class="ns-buttonbar ns-buttonbar--secondary">
       <NuxtLink to="/" class="ns-btn">Back</NuxtLink>
-      <span class="ns-buttonbar__spacer" />
-      <span class="ns-buttonbar__note">{{ resume.contact.privacyNotice }}</span>
     </div>
   </div>
 </template>

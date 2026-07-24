@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { resume } from '~/data/resume'
-import type { Tone } from '~/data/resume'
 
 const route = useRoute()
 const p = resume.positions.find((x) => x.id === route.params.id)
@@ -26,10 +25,6 @@ const detailGroup = {
   ],
 }
 
-function milestoneTone(t: string): Tone {
-  return t === 'Promoted' ? 'green' : t === 'Hired' ? 'blue' : 'gray'
-}
-
 const actions = [
   { label: 'View Employee', to: '/employee' },
   { label: 'Back to List', to: '/positions' },
@@ -39,11 +34,8 @@ const actions = [
 
 <template>
   <div data-section="position">
-    <NsBreadcrumb
-      :items="[{ label: 'Home', to: '/' }, { label: 'Activities', to: '/positions' }, { label: 'Employment History', to: '/positions' }, { label: p.company }]"
-    />
 
-    <NsRecordHeader type="Position" :name="p.company" :record-id="internalId" glyph="💼" :status-label="p.status">
+    <NsRecordHeader type="Position" :name="p.company" :record-id="internalId" :status-label="p.status">
       <template #actions>
         <button type="button" class="ns-btn" @click="toast.show('Read-only — this position is a matter of record.')">
           Edit
@@ -57,7 +49,7 @@ const actions = [
 
     <div class="ns-secbar">Summary</div>
     <div class="ns-fieldgroup">
-      <div class="ns-prose" style="max-width: 76ch; padding: 6px 0">
+      <div class="ns-prose">
         <p>{{ p.summary }}</p>
       </div>
     </div>
@@ -66,9 +58,7 @@ const actions = [
         <div v-show="active === 0" class="ns-subpanel">
           <ul class="ns-milestones">
             <li v-for="(m, i) in p.milestones" :key="i" class="ns-milestone">
-              <span class="ns-milestone__stamp">
-                <NsStatusPill :tone="milestoneTone(m.type)" :label="m.type" />
-              </span>
+              <span class="ns-milestone__stamp">{{ m.type }}</span>
               <span class="ns-milestone__note">{{ m.note }}</span>
             </li>
           </ul>
@@ -86,7 +76,7 @@ const actions = [
               <tbody>
                 <tr v-for="(t, i) in p.titles" :key="t.title">
                   <td class="ns-table__name">{{ t.title }}</td>
-                  <td class="ns-mono">{{ t.period }}</td>
+                  <td>{{ t.period }}</td>
                 </tr>
               </tbody>
             </table>
@@ -94,9 +84,7 @@ const actions = [
         </div>
 
         <div v-show="active === 2" class="ns-subpanel">
-          <div class="ns-tags">
-            <span v-for="tag in p.tags" :key="tag" class="ns-tag">{{ tag }}</span>
-          </div>
+          <p>{{ p.tags.join(', ') }}</p>
         </div>
     </NsSubtabs>
 

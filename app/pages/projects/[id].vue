@@ -12,7 +12,7 @@ const toast = useToast()
 const detailGroup = {
   title: 'Primary Information',
   fields: [
-    { label: 'Internal ID', value: p.code, mono: true },
+    { label: 'Internal ID', value: p.code },
     { label: 'Name', value: p.name },
     { label: 'Category', value: p.category },
     { label: 'Status', value: p.status, tone: p.statusTone },
@@ -30,11 +30,8 @@ const actions = [
 
 <template>
   <div data-section="project">
-    <NsBreadcrumb
-      :items="[{ label: 'Home', to: '/' }, { label: 'Lists', to: '/projects' }, { label: 'Projects', to: '/projects' }, { label: p.name }]"
-    />
 
-    <NsRecordHeader type="Project" :name="p.name" :record-id="p.code" glyph="📦" :status-label="p.status">
+    <NsRecordHeader type="Project" :name="p.name" :record-id="p.code" :status-label="p.status">
       <template #actions>
         <button type="button" class="ns-btn" @click="toast.show('Read-only — but the source is on GitHub if it has a repo.')">
           Edit
@@ -51,15 +48,26 @@ const actions = [
 
     <div class="ns-secbar">Description</div>
     <div class="ns-fieldgroup">
-      <div class="ns-prose" style="max-width: 76ch; padding: 6px 0">
+      <div class="ns-prose">
         <p>{{ p.blurb }}</p>
       </div>
     </div>
 
     <NsSubtabs :tabs="['Specifications', 'Links']" v-slot="{ active }">
         <div v-show="active === 0" class="ns-subpanel">
-          <div class="ns-tags">
-            <span v-for="s in p.specs" :key="s" class="ns-tag">{{ s }}</span>
+          <div class="ns-tablescroll">
+            <table class="ns-table">
+              <thead>
+                <tr>
+                  <th class="ns-nosort">Specification</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="spec in p.specs" :key="spec">
+                  <td>{{ spec }}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
 

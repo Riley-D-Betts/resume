@@ -4,7 +4,12 @@
  * 14px normal weight, with the active one simply BOLD plus a 2px
  * underline. Any subtab holding data gets a "•" appended.
  */
-defineProps<{ tabs: string[] }>()
+const props = defineProps<{ tabs: string[]; empty?: string[] }>()
+
+/** NetSuite bullets only the subtabs that actually contain data. */
+function hasData(t: string): boolean {
+  return !(props.empty ?? []).includes(t)
+}
 const active = ref(0)
 </script>
 
@@ -15,8 +20,8 @@ const active = ref(0)
         v-for="(t, i) in tabs"
         :key="t"
         type="button"
-        class="ns-subtab ns-subtab__dot"
-        :class="{ 'ns-subtab--on': active === i }"
+        class="ns-subtab"
+        :class="{ 'ns-subtab--on': active === i, 'ns-subtab__dot': hasData(t) }"
         role="tab"
         :aria-selected="active === i"
         @click="active = i"

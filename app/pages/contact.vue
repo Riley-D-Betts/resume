@@ -31,9 +31,8 @@ function reset(): void {
 
 <template>
   <div data-section="contact">
-    <NsBreadcrumb :items="[{ label: 'Home', to: '/' }, { label: 'Support' }, { label: 'Message' }]" />
 
-    <NsRecordHeader type="Message" name="New Message" glyph="✉" status-label="Draft">
+    <NsRecordHeader type="Message" name="New Message" status-label="Draft">
       <template #actions>
         <button type="button" class="ns-btn ns-btn--primary" @click="send">Save &amp; Send</button>
         <button type="button" class="ns-btn" @click="reset">Reset</button>
@@ -84,30 +83,31 @@ function reset(): void {
       </div>
 
       <div>
-        <NsPortlet title="Contact Information" :refreshable="false">
-          <ul class="ns-recent">
-            <a :href="`mailto:${c.email}`" class="ns-recent__item">
-              <span class="ns-recent__glyph">✉</span>
-              <span class="ns-recent__name">{{ c.email }}</span>
-              <span class="ns-recent__type">Email</span>
-            </a>
-            <a :href="c.githubUrl" target="_blank" rel="noopener" class="ns-recent__item">
-              <span class="ns-recent__glyph">◈</span>
-              <span class="ns-recent__name">{{ c.github }}</span>
-              <span class="ns-recent__type">GitHub</span>
-            </a>
-            <a href="https://fobech.com" target="_blank" rel="noopener" class="ns-recent__item">
-              <span class="ns-recent__glyph">▣</span>
-              <span class="ns-recent__name">{{ c.fobech }}</span>
-              <span class="ns-recent__type">Studio</span>
-            </a>
-          </ul>
-          <template #foot>
-            <span style="color: var(--ns-muted)">
-              {{ resume.identity.location }} · {{ resume.identity.timezone }}
-            </span>
-          </template>
-        </NsPortlet>
+        <div class="ns-secbar">Contact Information</div>
+        <div class="ns-fieldgroup">
+          <div class="ns-fields ns-fields--one">
+            <div class="ns-field">
+              <span class="ns-field__label">Email</span>
+              <span class="ns-field__value"><a :href="`mailto:${c.email}`">{{ c.email }}</a></span>
+            </div>
+            <div class="ns-field">
+              <span class="ns-field__label">GitHub</span>
+              <span class="ns-field__value">
+                <a :href="c.githubUrl" target="_blank" rel="noopener">{{ c.github }}</a>
+              </span>
+            </div>
+            <div class="ns-field">
+              <span class="ns-field__label">Studio</span>
+              <span class="ns-field__value">
+                <a href="https://fobech.com" target="_blank" rel="noopener">{{ c.fobech }}</a>
+              </span>
+            </div>
+            <div class="ns-field">
+              <span class="ns-field__label">Location</span>
+              <span class="ns-field__value">{{ resume.identity.location }} · {{ resume.identity.timezone }}</span>
+            </div>
+          </div>
+        </div>
 
         <div class="ns-note">{{ c.intro }}</div>
       </div>

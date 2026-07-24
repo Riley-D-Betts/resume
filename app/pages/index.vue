@@ -145,7 +145,6 @@ const locked = () => toast.show('This dashboard is Locked — content and layout
               v-bind="rec.to ? { to: rec.to } : externalAttrs(rec.href)"
               class="ns-recent__item"
             >
-              <span class="ns-recent__glyph">{{ rec.glyph }}</span>
               <span class="ns-recent__name">{{ rec.name }}</span>
               <span class="ns-recent__type">{{ rec.type }}</span>
             </component>

@@ -22,25 +22,28 @@ const systemNotes = [
   { date: '2026', field: 'Subsidiary', change: 'added → Fobech (Founder)', by: resume.identity.name },
 ]
 
-function proficiencyTone(p: string) {
-  return p === 'Expert' ? 'green' : p === 'Advanced' ? 'blue' : 'gray'
-}
-
 const readOnly = () => toast.show('This record is read-only — you have look-but-don’t-touch Administrator access.')
 </script>
 
 <template>
   <div data-section="employee">
-    <NsBreadcrumb
-      :items="[{ label: 'Home', to: '/' }, { label: 'Lists' }, { label: 'Employees', to: '/employee' }, { label: 'Betts, Riley' }]"
-    />
 
-    <NsRecordHeader type="Employee" name="Betts, Riley" record-id="1042" glyph="👤" :status-label="emp.status">
+    <NsRecordHeader type="Employee" name="Betts, Riley" record-id="1042" :status-label="emp.status">
       <template #actions>
         <button type="button" class="ns-btn" @click="readOnly">Edit</button>
         <NuxtLink to="/" class="ns-btn">Back</NuxtLink>
-        <button type="button" class="ns-btn ns-btn--icon" title="Print" aria-label="Print" @click="toast.show('Sent to the printer down the hall. It is out of toner.')">
-          ⎙
+        <button
+          type="button"
+          class="ns-btn ns-btn--icon"
+          title="Print"
+          aria-label="Print"
+          @click="toast.show('Sent to the printer down the hall. It is out of toner.')"
+        >
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+            <path d="M4.5 6V2.2h7V6" fill="none" stroke="currentColor" stroke-width="1.3" />
+            <rect x="2" y="6" width="12" height="5.2" fill="none" stroke="currentColor" stroke-width="1.3" />
+            <path d="M4.5 9.6h7v4.2h-7z" fill="#fff" stroke="currentColor" stroke-width="1.3" />
+          </svg>
         </button>
         <NsActionMenu :items="actions" />
         <NuxtLink to="/contact" class="ns-btn ns-btn--primary">New Message</NuxtLink>
@@ -69,13 +72,9 @@ const readOnly = () => toast.show('This record is read-only — you have look-bu
             <tbody>
               <tr v-for="(s, i) in emp.skills" :key="s.category">
                 <td class="ns-table__name">{{ s.category }}</td>
-                <td><NsStatusPill :tone="proficiencyTone(s.proficiency) as any" :label="s.proficiency" /></td>
-                <td class="ns-mono">{{ s.years }}</td>
-                <td>
-                  <div class="ns-tags">
-                    <span v-for="k in s.skills" :key="k" class="ns-tag">{{ k }}</span>
-                  </div>
-                </td>
+                <td>{{ s.proficiency }}</td>
+                <td>{{ s.years }}</td>
+                <td>{{ s.skills.join(', ') }}</td>
               </tr>
             </tbody>
           </table>
@@ -89,7 +88,7 @@ const readOnly = () => toast.show('This record is read-only — you have look-bu
 
       <!-- Communication -->
       <div v-show="active === 2" class="ns-subpanel">
-        <div class="ns-prose" style="max-width: 74ch">
+        <div class="ns-prose">
           <p v-for="(para, i) in emp.bio" :key="i">{{ para }}</p>
         </div>
       </div>
@@ -137,9 +136,9 @@ const readOnly = () => toast.show('This record is read-only — you have look-bu
             </thead>
             <tbody>
               <tr v-for="(n, i) in systemNotes" :key="i">
-                <td class="ns-mono">{{ n.date }}</td>
+                <td>{{ n.date }}</td>
                 <td class="ns-table__name">{{ n.field }}</td>
-                <td class="ns-mono">{{ n.change }}</td>
+                <td>{{ n.change }}</td>
                 <td>{{ n.by }}</td>
               </tr>
             </tbody>
@@ -151,8 +150,8 @@ const readOnly = () => toast.show('This record is read-only — you have look-bu
     <div class="ns-buttonbar ns-buttonbar--secondary">
       <button type="button" class="ns-btn" @click="readOnly">Edit</button>
       <NuxtLink to="/" class="ns-btn">Back</NuxtLink>
-      <NuxtLink to="/positions" class="ns-btn">Employment History</NuxtLink>
-      <NuxtLink to="/projects" class="ns-btn">Projects</NuxtLink>
+      <NsActionMenu :items="actions" />
+      <NuxtLink to="/contact" class="ns-btn ns-btn--primary">New Message</NuxtLink>
     </div>
   </div>
 </template>

@@ -40,7 +40,6 @@ const rows = computed(() =>
 
 <template>
   <div data-section="projects">
-    <NsBreadcrumb :items="[{ label: 'Home', to: '/' }, { label: 'Lists' }, { label: 'Projects' }]" />
 
     <NsPageTitle
       title="Projects"
@@ -93,14 +92,14 @@ const rows = computed(() =>
               <span class="ns-table__sep">|</span>
               <NuxtLink :to="`/projects/${r.id}`">View</NuxtLink>
             </td>
-            <td class="ns-mono">{{ r.code }}</td>
+            <td>{{ r.code }}</td>
             <td class="ns-table__name">
               <NuxtLink :to="`/projects/${r.id}`">{{ r.name }}</NuxtLink>
               <span v-if="r.featured" title="Featured" style="color: var(--ns-amber)"> ★</span>
             </td>
             <td>{{ r.category }}</td>
             <td class="ns-num" style="text-align: right">{{ r.specs }}</td>
-            <td><NsStatusPill :tone="r.statusTone as any" :label="String(r.status)" /></td>
+            <td>{{ r.status }}</td>
           </tr>
         </template>
       </NsTable>

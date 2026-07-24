@@ -30,6 +30,7 @@ const columns = [
 const q = ref('')
 const statusFilter = ref('- All -')
 const statuses = ['- All -', ...Array.from(new Set(resume.positions.map((p) => p.status)))]
+const filtersOpen = ref(true)
 
 const rows = computed(() =>
   allRows.filter((r) => {
@@ -43,51 +44,70 @@ const rows = computed(() =>
 
 <template>
   <div data-section="positions">
-    <NsBreadcrumb :items="[{ label: 'Home', to: '/' }, { label: 'Activities' }, { label: 'Employment History' }]" />
+    <!-- NetSuite list pages carry no breadcrumb and no subtitle: just the
+         record icon and the list name as the page heading. -->
+    <div class="ns-pagetitle">
+      <div class="ns-pagetitle__first">
+        <h1 class="ns-record-type">Employment History</h1>
+      </div>
+    </div>
 
-    <NsPageTitle
-      title="Employment History"
-      subtitle="Every role Riley has held, in order — the phones to the ERP core."
-    />
+    <!-- Control bar order is NetSuite's: View → select → Customize View →
+         separator → the New button (which is never first). -->
+    <div class="ns-controlbar">
+      <span class="ns-listbar__label">View</span>
+      <select class="ns-select" aria-label="View">
+        <option>Default</option>
+        <option>Most Recent First</option>
+      </select>
+      <button type="button" class="ns-btn" @click="toast.show('View customization is disabled on this account.')">
+        Customize View
+      </button>
+      <span class="ns-controlbar__sep" aria-hidden="true" />
+      <button
+        type="button"
+        class="ns-btn ns-btn--primary"
+        @click="toast.show('New positions are filled by hiring managers. Know one? Send a message.')"
+      >
+        New Position
+      </button>
+    </div>
 
-    <div class="ns-buttonbar">
-        <button
-          type="button"
-          class="ns-btn ns-btn--primary"
-          @click="toast.show('New positions are filled by hiring managers. Know one? Send a message.')"
-        >
-          New Position
-        </button>
-        <button type="button" class="ns-btn" @click="toast.show('View customization is disabled on this account.')">
-          Customize View
-        </button>
-        <button type="button" class="ns-btn" @click="toast.show('Export queued — check your downloads. Or just read the page.')">
-          Export - CSV
-        </button>
-      <span class="ns-buttonbar__spacer" />
-      <span class="ns-buttonbar__note">{{ allRows.length }} record(s)</span>
+    <div class="ns-filters">
+      <button type="button" class="ns-filters__head" :aria-expanded="filtersOpen" @click="filtersOpen = !filtersOpen">
+        <span class="ns-filters__box" aria-hidden="true">{{ filtersOpen ? '−' : '+' }}</span>
+        Filters
+      </button>
+      <div v-show="filtersOpen" class="ns-filters__body">
+        <label class="ns-filter">
+          <span class="ns-filter__label">Status</span>
+          <select v-model="statusFilter" class="ns-select">
+            <option v-for="s in statuses" :key="s" :value="s">{{ s }}</option>
+          </select>
+        </label>
+        <label class="ns-filter">
+          <span class="ns-filter__label">Quick Find</span>
+          <input v-model="q" class="ns-input" type="search" style="width: 200px" />
+        </label>
+      </div>
     </div>
 
     <div class="ns-listwrap">
       <div class="ns-listbar">
-        <span class="ns-listbar__label">View</span>
-        <select class="ns-select" aria-label="View">
-          <option>Default</option>
-          <option>Most Recent First</option>
-        </select>
         <span class="ns-listbar__label">Style</span>
         <select class="ns-select" aria-label="Style">
           <option>Normal</option>
           <option>Report</option>
           <option>Grid</option>
         </select>
-        <span class="ns-listbar__label">Status</span>
-        <select v-model="statusFilter" class="ns-select" aria-label="Status filter">
-          <option v-for="s in statuses" :key="s" :value="s">{{ s }}</option>
+        <span class="ns-listbar__label">Quick Sort</span>
+        <select class="ns-select" aria-label="Quick Sort">
+          <option>Period</option>
+          <option>Company</option>
+          <option>Status</option>
         </select>
         <span class="ns-listbar__spacer" />
-        <span class="ns-listbar__label">Quick Find</span>
-        <input v-model="q" class="ns-input" type="search" placeholder="" style="width: 170px" aria-label="Quick find" />
+        <span class="ns-listbar__label">{{ allRows.length }} record(s)</span>
       </div>
 
       <NsTable :columns="columns" :rows="rows" initial-sort="periodSort" initial-dir="desc">
@@ -100,7 +120,7 @@ const rows = computed(() =>
             </td>
             <td class="ns-table__name">
               <NuxtLink :to="`/positions/${r.id}`">{{ r.company }}</NuxtLink>
-              <div style="color: var(--ns-muted); font-size: 10.5px">{{ r.subtitle }}</div>
+              <div style="color: var(--ns-muted); font-size: 11px">{{ r.subtitle }}</div>
             </td>
             <td>
               {{ r.title }}
@@ -109,20 +129,24 @@ const rows = computed(() =>
               </span>
             </td>
             <td>{{ r.location }}</td>
-            <td class="ns-mono">{{ r.period }}</td>
-            <td><NsStatusPill :tone="r.statusTone as any" :label="String(r.status)" /></td>
+            <td>{{ r.period }}</td>
+            <td>{{ r.status }}</td>
           </tr>
         </template>
       </NsTable>
 
       <div class="ns-listfoot">
-        <span>1 - {{ rows.length }} of {{ rows.length }}</span>
-        <span class="ns-listfoot__spacer" />
         <span class="ns-pager">
           <button disabled title="Previous">◄</button>
-          <button disabled>1</button>
+          <select class="ns-select" aria-label="Page range">
+            <option>1 - {{ rows.length }} of {{ rows.length }}</option>
+          </select>
           <button disabled title="Next">►</button>
         </span>
+        <span class="ns-listfoot__spacer" />
+        <button type="button" class="ns-linkish" @click="toast.show('Export queued — or just read the page.')">
+          Export - CSV
+        </button>
       </div>
     </div>
   </div>

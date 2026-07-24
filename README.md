@@ -1,11 +1,22 @@
 # RILEY BETTS — RÉSUMÉ (MOCK NETSUITE UI)
 
-A résumé built as a working mock NetSuite ERP account. The career is
-presented the way NetSuite would present it: a Home dashboard of portlets
-(KPIs, a gauge, a trend graph, reminders, recent records), an Employee
-record with subtabs, an Employment History list, Project records and a
-Fobech "subsidiary". Global search, dropdown menus, sortable lists,
-collapsible portlets and a contact "message" form all function.
+A résumé built as a working mock Oracle NetSuite ERP account. The career
+is presented the way NetSuite presents data: a Home dashboard (Role
+Center) of portlets, an Employee record with subtabs and sublists, an
+Employment History list, Project records and a Fobech "subsidiary".
+
+The costume is built against NetSuite's own published design tokens and
+Oracle's own screenshots rather than from memory, so the details are the
+real ones: the light `#f1efed` masthead with its stacked ORACLE/NetSuite
+lockup, the flat `#325c72` Main Menu with icon-only Recent Records /
+Shortcuts / Home tabs, single-column dropdowns opening with
+"<Tab> Overview", full-bleed white record pages with no card, field
+labels above their values in 12px uppercase, flat `#DFE4EB` group bars,
+subtabs that are bold-plus-underline rather than folder tabs, and
+sublists with NetSuite's signature pale-yellow row hover.
+
+Global search, the menu flyouts, sortable and filterable lists,
+collapsible portlets, subtab switching and the contact form all work.
 
 Underneath it runs its own first-party analytics pipeline, session replay
 included. No third-party trackers, nothing leaves the box. One Node
@@ -13,11 +24,12 @@ process, one SQLite file.
 
 | Route | What |
 | --- | --- |
-| `/` | Home dashboard (Nuxt 4, SSR) |
-| `/employee` | the Employee record — bio, skills matrix, contact |
+| `/` | Home dashboard — the Role Center |
+| `/employee` | the Employee record — bio, skills sublist, system notes |
 | `/positions`, `/positions/:id` | Employment History list + Position records |
 | `/projects`, `/projects/:id` | Projects list + Project records |
 | `/fobech` | the Fobech subsidiary record |
+| `/colophon` | Customization > Scripting — how the site is built |
 | `/contact` | compose a message (opens your mail client) |
 | `/ops` | admin console: traffic overview, session explorer, rrweb replay player |
 | `POST /api/collect`, `POST /api/replay` | telemetry intake |
@@ -36,10 +48,11 @@ Dev mode runs without secrets. A production build refuses to boot until
 ## SEG 02 // EDITING CONTENT
 
 Every word on the page lives in `app/data/resume.ts`, the single source of
-truth, shaped as NetSuite records: the account/masthead, the Employee
-record and its skills, dashboard KPIs/meter/trend/reminders, the work
-history positions, project records, the Fobech subsidiary and contact
-details. Edit that one typed file and the site follows.
+truth, shaped as NetSuite records: the account/masthead, the Main Menu
+tree, the Employee record and its skills, dashboard
+KPIs/meter/trend/reminders, the work history positions, project records,
+the Fobech subsidiary and contact details. Edit that one typed file and
+the site follows.
 
 Components never hardcode copy; if you want to change what the site says,
 you never have to touch a `.vue` file. The NetSuite look lives in
@@ -214,7 +227,7 @@ NUXT_ADMIN_PASSWORD=test NUXT_SESSION_PASSWORD="$(openssl rand -hex 32)" npm run
 npx playwright test -c tests
 ```
 
-Covers the public site (dashboard portlets render, record-to-record
+Covers the public site (Role Center portlets render, record-to-record
 navigation, subtab switching, console-error-free, reduced motion), the
 analytics pipeline (a real browsed session asserted straight from SQLite,
 replay chunk included) and the `/ops` console (login gate, overview,

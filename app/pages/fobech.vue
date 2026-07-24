@@ -15,11 +15,8 @@ const actions = [
 
 <template>
   <div data-section="fobech">
-    <NsBreadcrumb
-      :items="[{ label: 'Home', to: '/' }, { label: 'Lists', to: '/fobech' }, { label: 'Subsidiaries', to: '/fobech' }, { label: f.name }]"
-    />
 
-    <NsRecordHeader type="Subsidiary" :name="f.name" record-id="2" glyph="🏢" status-label="Active">
+    <NsRecordHeader type="Subsidiary" :name="f.name" record-id="2" status-label="Active">
       <template #actions>
         <button type="button" class="ns-btn" @click="toast.show('Read-only — Fobech ships software, not résumé edits.')">
           Edit
@@ -29,10 +26,6 @@ const actions = [
         <a :href="f.url" target="_blank" rel="noopener" class="ns-btn ns-btn--primary">{{ f.cta }}</a>
       </template>
     </NsRecordHeader>
-
-    <div class="ns-note" style="margin-bottom: 12px">
-      <b>{{ f.taglines[0] }}</b> — {{ f.taglines[1] }}
-    </div>
 
     <NsFieldGroup :group="f.groups[0]!" />
 
@@ -63,7 +56,8 @@ const actions = [
             style="height: 30px; width: auto; margin-bottom: 10px"
             onerror="this.style.display='none'"
           />
-          <div class="ns-prose" style="max-width: 76ch">
+          <div class="ns-prose">
+            <p><b>{{ f.taglines[0] }}</b> {{ f.taglines[1] }}</p>
             <p>{{ f.blurb }}</p>
           </div>
         </div>

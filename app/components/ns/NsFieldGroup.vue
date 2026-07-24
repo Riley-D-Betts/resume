@@ -16,7 +16,7 @@ function isInternal(href?: string): boolean {
         <div class="ns-field__label" :class="{ 'ns-field__label--help': f.help }" :title="f.help">
           {{ f.label }}
         </div>
-        <div class="ns-field__value" :class="{ 'ns-mono': f.mono }">
+        <div class="ns-field__value">
           <template v-if="f.href">
             <NuxtLink v-if="isInternal(f.href)" :to="f.href">{{ f.value }}</NuxtLink>
             <a
@@ -27,7 +27,6 @@ function isInternal(href?: string): boolean {
               >{{ f.value }}</a
             >
           </template>
-          <NsStatusPill v-else-if="f.tone" :tone="f.tone" :label="f.value" />
           <span v-else>{{ f.value }}</span>
         </div>
       </div>
