@@ -14,7 +14,7 @@ npm-debug.log*
 !.env.example
 
 # Runtime data (analytics DB, replays, geo DB)
-data/
+/data/
 
 # Playwright
 test-results/
