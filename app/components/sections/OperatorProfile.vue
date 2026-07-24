@@ -2,10 +2,11 @@
 import { resume } from '~/data/resume'
 
 /**
- * SEG 02 — OPERATOR PROFILE. Dossier layout: schematic ID badge on
- * the left, bio + count-up stats + fuse-panel skill rows on the right.
- * The fuse chips flick on in shuffled order like a breaker panel
- * energizing.
+ * SEG 02 — OPERATOR PROFILE. Dossier layout: schematic ID badge,
+ * bio, count-up stats, fuse-panel skill rows. Beyond the entrance:
+ * the badge runs a continuous scan (sweep line + a blip orbiting the
+ * head circle), bio lines brighten as they cross the reading beam,
+ * and the stats flicker as they lock in.
  */
 const about = resume.about
 
@@ -29,6 +30,8 @@ onMounted(async () => {
 
     const badge = el.querySelector('.profile__badge')
     const badgeStrokes = el.querySelectorAll<SVGGeometryElement>('.profile__avatar [data-draw]')
+    const sweep = el.querySelector('.profile__avatar-sweep')
+    const blip = el.querySelector('.profile__avatar-blip')
     const paras = el.querySelectorAll('.profile__para')
     const fuses = el.querySelectorAll('.profile__fuse')
     const fuseLamps = el.querySelectorAll('.profile__fuse .lamp')
@@ -44,6 +47,7 @@ onMounted(async () => {
 
     gsap.set(badge, { autoAlpha: 0, x: -20 })
     gsap.set(badgeStrokes, { drawSVG: '0%' })
+    gsap.set([sweep, blip], { autoAlpha: 0 })
     gsap.set(split.lines, { yPercent: 110 })
     gsap.set(fuses, { autoAlpha: 0 })
     gsap.set(fuseLamps, { backgroundColor: 'var(--text-faint)', boxShadow: 'none' })
@@ -52,7 +56,7 @@ onMounted(async () => {
       scrollTrigger: { trigger: el, start: 'top 70%', once: true },
     })
 
-    tl.to(badge, { autoAlpha: 1, x: 0, duration: 0.5 })
+    tl.to(badge, { autoAlpha: 1, x: 0, duration: 0.5, ease: 'console' })
       .to(badgeStrokes, { drawSVG: '100%', duration: 1.1, ease: 'power2.inOut', stagger: 0.08 }, '<0.1')
       .to(split.lines, { yPercent: 0, duration: 0.7, ease: 'power3.out', stagger: 0.045 }, '<0.2')
       .to(
@@ -65,8 +69,50 @@ onMounted(async () => {
         { backgroundColor: 'var(--green)', duration: 0.1, stagger: 0.04, clearProps: 'boxShadow' },
         '<0.15',
       )
+      .to([sweep, blip], { autoAlpha: 1, duration: 0.4 }, '>-0.2')
 
-    // count-up stats when the row is half visible
+    // -- continuous badge scan (only while the badge is visible) --
+    const scan = gsap.timeline({ repeat: -1, paused: true })
+    if (sweep) {
+      scan.fromTo(sweep, { attr: { y1: 18, y2: 18 } }, { attr: { y1: 200, y2: 200 }, duration: 2.6, ease: 'none' }, 0)
+        .to(sweep, { opacity: 0.15, duration: 0.3, yoyo: true, repeat: 1 }, 2.0)
+    }
+    if (blip) {
+      // orbit the head circle (cx 100, cy 78, r 34)
+      scan.to(
+        blip,
+        {
+          duration: 2.6,
+          ease: 'none',
+          motionPath: {
+            path: 'M100,44 A34,34 0 1 1 99.9,44',
+            autoRotate: false,
+          },
+        },
+        0,
+      )
+    }
+    ScrollTrigger.create({
+      trigger: badge as Element,
+      start: 'top bottom',
+      end: 'bottom top',
+      onToggle: (self) => (self.isActive ? scan.play() : scan.pause()),
+    })
+
+    // -- reading beam: lines brighten as they cross mid-view -----
+    for (const line of split.lines) {
+      gsap.fromTo(
+        line,
+        { opacity: 0.45 },
+        {
+          opacity: 1,
+          ease: 'none',
+          scrollTrigger: { trigger: line, start: 'top 78%', end: 'top 52%', scrub: true },
+        },
+      )
+    }
+
+    // -- count-up stats, flicker on lock-in ----------------------
     statEls.forEach((statEl) => {
       const target = Number(statEl.dataset.countTo)
       if (Number.isNaN(target)) return
@@ -80,11 +126,17 @@ onMounted(async () => {
         onUpdate() {
           statEl.textContent = proxy.n.toFixed(decimals)
         },
+        onComplete() {
+          gsap.fromTo(statEl, { opacity: 0.35 }, { opacity: 1, duration: 0.07, repeat: 3, yoyo: true })
+        },
       })
     })
 
     ScrollTrigger.refresh()
-    return () => split.revert()
+    return () => {
+      scan.kill()
+      split.revert()
+    }
   })
 })
 
@@ -111,6 +163,17 @@ onUnmounted(() => ctx?.revert())
             <path data-draw d="M188 208 h-24 M188 208 v-24" />
             <path data-draw d="M20 110 h160" stroke-dasharray="2 6" />
           </g>
+          <line
+            class="profile__avatar-sweep"
+            x1="14"
+            y1="18"
+            x2="186"
+            y2="18"
+            stroke="var(--teal-hot)"
+            stroke-width="1"
+            opacity="0.5"
+          />
+          <circle class="profile__avatar-blip" cx="100" cy="44" r="2.5" fill="var(--green)" />
         </svg>
         <div class="profile__badge-meta">
           <p class="label">OPERATOR CLASS</p>
@@ -282,6 +345,19 @@ onUnmounted(() => ctx?.revert())
   padding: 3px 8px;
   font-size: var(--fs-micro);
   letter-spacing: 0.1em;
+}
+
+@media (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .profile__fuse:hover {
+    border-color: var(--green);
+    animation: fuse-flicker 0.25s steps(2) 2;
+  }
+}
+
+@keyframes fuse-flicker {
+  50% {
+    opacity: 0.5;
+  }
 }
 
 @media (max-width: 900px) {

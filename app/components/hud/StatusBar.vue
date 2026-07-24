@@ -13,6 +13,34 @@ const progress = ref(0)
 const flash = ref('')
 const clock = useIdahoTime()
 
+/**
+ * The segment readout is GSAP-owned: Vue renders the initial value
+ * once, then the watcher scrambles the span to each new segment so
+ * the two never fight over textContent.
+ */
+const segEl = ref<HTMLElement | null>(null)
+let reduced = false
+
+watch(current, async (next) => {
+  const el = segEl.value
+  if (!el) return
+  if (reduced) {
+    el.textContent = next
+    return
+  }
+  const { gsap } = await import('gsap')
+  gsap.to(el, { duration: 0.35, scrambleText: { text: next, chars: '01▮#/', speed: 2 }, overwrite: true })
+})
+
+// the seg span unmounts while a drill flash is showing; restore the
+// live value when it comes back
+watch(flash, async (v) => {
+  if (!v) {
+    await nextTick()
+    if (segEl.value) segEl.value.textContent = current.value
+  }
+})
+
 let observer: IntersectionObserver | undefined
 let raf = 0
 let flashTimer: ReturnType<typeof setTimeout> | undefined
@@ -33,6 +61,7 @@ function onDrill(e: Event) {
 }
 
 onMounted(() => {
+  reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
   observer = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
@@ -73,7 +102,7 @@ const bar = computed(() => {
         <span class="hud__flash">{{ flash }}</span>
       </template>
       <template v-else>
-        <span class="hud__seg-label">SEG</span> {{ current }}
+        <span class="hud__seg-label">SEG</span> <span ref="segEl">01 / SYS</span>
       </template>
     </div>
 
