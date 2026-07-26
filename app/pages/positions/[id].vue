@@ -5,11 +5,11 @@ const route = useRoute()
 const p = resume.positions.find((x) => x.id === route.params.id)
 if (!p) throw createError({ statusCode: 404, statusMessage: 'Position not found', fatal: true })
 
-useHead({ title: `Position: ${p.company} | NetSuite` })
+useHead({ title: `Position: ${p.company} | Bettsuite` })
 
 const toast = useToast()
 
-// a stable internal id for the title line, the way NetSuite shows one
+// a stable internal id for the title line, the way Bettsuite shows one
 const internalId = String(resume.positions.findIndex((x) => x.id === p.id) + 201)
 
 const detailGroup = {

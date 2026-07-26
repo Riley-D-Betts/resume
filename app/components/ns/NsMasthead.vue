@@ -3,7 +3,7 @@ import { resume } from '~/data/resume'
 import { useSearchIndex } from '~/composables/useSearchIndex'
 
 /**
- * NetSuite's "Masthead" — the LIGHT top row. Oracle documents it as
+ * Bettsuite's "Masthead" — the LIGHT top row. Riley documents it as
  * exactly these elements, in this order: logo, global search, Create
  * New, Help, Feedback, user name + role. There is deliberately no
  * notification bell, gear or envelope here.
@@ -18,7 +18,7 @@ const cursor = ref(0)
 
 const results = computed(() => {
   const q = query.value.trim().toLowerCase()
-  // NetSuite's global search fires at 3 characters minimum
+  // Bettsuite's global search fires at 3 characters minimum
   if (q.length < 3) return []
   return index.filter((h) => h.name.toLowerCase().includes(q) || h.terms.includes(q)).slice(0, 7)
 })
@@ -52,9 +52,9 @@ function onBlur(): void {
 
 <template>
   <header class="ns-mast">
-    <NuxtLink to="/" class="ns-logo" aria-label="Oracle NetSuite home">
-      <span class="ns-logo__oracle">ORACLE</span>
-      <span class="ns-logo__word">NetSuite</span>
+    <NuxtLink to="/" class="ns-logo" aria-label="Riley Bettsuite home">
+      <span class="ns-logo__riley">RILEY</span>
+      <span class="ns-logo__word">Bettsuite</span>
     </NuxtLink>
 
     <span class="ns-logo__sub">{{ account.accountName }}</span>

@@ -1,5 +1,5 @@
 /**
- * Fire a NetSuite-style confirmation toast from anywhere.
+ * Fire a Bettsuite-style confirmation toast from anywhere.
  * The <NsToaster> component (mounted once in the layout) listens for
  * the `ns:toast` window event and renders the banner.
  */

@@ -3,15 +3,15 @@ import type { NuxtError } from '#app'
 
 const props = defineProps<{ error: NuxtError }>()
 
-// The error page renders outside the layout, so set the NetSuite theme
+// The error page renders outside the layout, so set the Bettsuite theme
 // class on <body> here too.
-useHead({ bodyAttrs: { class: 'ns' }, title: `Error ${props.error.statusCode} | NetSuite` })
+useHead({ bodyAttrs: { class: 'ns' }, title: `Error ${props.error.statusCode} | Bettsuite` })
 
 const is404 = computed(() => props.error.statusCode === 404)
 </script>
 
 <template>
-  <!-- NetSuite renders errors inside the normal chrome as plain
+  <!-- Bettsuite renders errors inside the normal chrome as plain
        left-aligned text, not as a centred card. -->
   <div class="ns-app">
     <NsMasthead />

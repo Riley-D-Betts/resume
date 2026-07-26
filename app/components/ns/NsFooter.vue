@@ -8,7 +8,7 @@ const contact = resume.contact
 <template>
   <footer class="ns-footer">
     <div class="ns-footer__inner">
-      <span class="ns-footer__badge">Powered by NetSuite</span>
+      <span class="ns-footer__badge">Powered by Bettsuite</span>
       <span>Release {{ account.release }}</span>
       <span>{{ account.accountId }}</span>
       <span>Role: {{ account.roleLabel }}</span>

@@ -1,10 +1,10 @@
 /* ============================================================
-   NETSUITE THEME — the résumé's costume.
+   BETTSUITE THEME — the résumé's costume.
 
-   Built against Oracle NetSuite's own UIF-refreshed CSS tokens
+   Built against Riley Bettsuite's own UIF-refreshed CSS tokens
    rather than from memory. The load-bearing facts:
 
-     - NetSuite calls the LIGHT top row the "Masthead" (#f1efed)
+     - Bettsuite calls the LIGHT top row the "Masthead" (#f1efed)
        and the DARK bar under it the "Main Menu" (#325c72, flat).
      - Record pages are full-bleed WHITE. No card, no border,
        no shadow, no gradient strip behind the buttons.
@@ -26,7 +26,7 @@
 :root {
   /* -- chrome --------------------------------------------- */
   --ns-mast-bg: #f1efed; /* masthead — warm off-white, NOT navy */
-  --ns-mast-ink: #161513; /* the ORACLE / NetSuite wordmark */
+  --ns-mast-ink: #161513; /* the RILEY / Bettsuite wordmark */
   --ns-mast-dim: #666666;
   --ns-mast-rule: #e4e4e3;
 
@@ -39,7 +39,7 @@
   --ns-drop-hover: #ededec;
   --ns-drop-ink: #161513;
 
-  /* -- NetSuite's blue-gray ramp (#607799 is THE one) ------ */
+  /* -- Bettsuite's blue-gray ramp (#607799 is THE one) ------ */
   --ns-bg-50: #eff1f5;
   --ns-bg-100: #dfe4eb; /* field group + portlet title bars */
   --ns-bg-200: #bfc9d6;
@@ -81,7 +81,7 @@
   --ns-on-dark-dim: #b9c6d2;
 
   /* -- signal --------------------------------------------- */
-  --ns-link: #255599; /* NetSuite link blue */
+  --ns-link: #255599; /* Bettsuite link blue */
   --ns-link-hover: #1b3f73;
   --ns-accent: #006aff; /* primary button */
   --ns-accent-dark: #0055cc;
@@ -164,7 +164,7 @@ body.ns :focus-visible {
   display: flex;
   flex-direction: column;
 }
-/* NetSuite's own body padding: 20px, 5px on top */
+/* Bettsuite's own body padding: 20px, 5px on top */
 .ns-main {
   flex: 1 0 auto;
   width: 100%;
@@ -189,7 +189,7 @@ body.ns :focus-visible {
   color: var(--ns-mast-ink);
   background: var(--ns-mast-bg);
 }
-/* Two-line stacked "ORACLE / NetSuite" lockup — no tile, no orange */
+/* Two-line stacked "RILEY / Bettsuite" lockup — no tile, no orange */
 .ns-logo {
   display: inline-flex;
   flex-direction: column;
@@ -205,7 +205,7 @@ body.ns :focus-visible {
   text-decoration: none;
   color: var(--ns-mast-ink);
 }
-.ns-logo__oracle {
+.ns-logo__riley {
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 2.1px;
@@ -512,7 +512,7 @@ body.ns :focus-visible {
   margin-bottom: 20px;
   line-height: 1;
 }
-.ns-splash__logo .ns-logo__oracle {
+.ns-splash__logo .ns-logo__riley {
   font-size: 15px;
   letter-spacing: 3.6px;
 }
@@ -718,7 +718,7 @@ body.ns :focus-visible {
   cursor: pointer;
   white-space: nowrap;
 }
-/* NetSuite darkens with a transparent scrim, it never swaps the fill */
+/* Bettsuite darkens with a transparent scrim, it never swaps the fill */
 .ns-btn::before {
   content: '';
   position: absolute;
@@ -862,7 +862,7 @@ body.ns :focus-visible {
 .ns-fieldgroup {
   padding-left: 4px;
 }
-/* NetSuite's 15px spacer between one group and the next bar */
+/* Bettsuite's 15px spacer between one group and the next bar */
 .ns-fieldgroup + .ns-secbar,
 .ns-fieldgroup + .ns-subtabs {
   margin-top: 15px;
@@ -928,7 +928,7 @@ body.ns :focus-visible {
   font-weight: 700;
   border-bottom-color: #227e9e;
 }
-/* NetSuite appends a bullet to any subtab that actually holds data */
+/* Bettsuite appends a bullet to any subtab that actually holds data */
 .ns-subtab__dot::after {
   content: '•';
   padding-left: 3px;
@@ -1108,7 +1108,7 @@ body.ns :focus-visible {
 .ns-table tbody tr:nth-child(even) td {
   background: #fafafa;
 }
-/* NetSuite's signature pale-yellow row hover */
+/* Bettsuite's signature pale-yellow row hover */
 .ns-table tbody tr:hover td {
   background: #ffffe5;
 }
@@ -1136,7 +1136,7 @@ body.ns :focus-visible {
 .ns-listfoot__spacer {
   flex: 1;
 }
-/* NetSuite paginates with a range dropdown plus two arrow icons —
+/* Bettsuite paginates with a range dropdown plus two arrow icons —
    never a row of numbered page buttons. */
 .ns-pager {
   display: inline-flex;
@@ -1533,7 +1533,7 @@ a.ns-remind__item:hover .ns-remind__count {
 .ns-prose p:last-child {
   margin-bottom: 0;
 }
-/* NetSuite's inline help / system message box */
+/* Bettsuite's inline help / system message box */
 .ns-note {
   padding: 8px 10px;
   background: #cfeefc;
@@ -1578,7 +1578,7 @@ a.ns-remind__item:hover .ns-remind__count {
 /* ============================================================
    Footer
    ============================================================ */
-/* NetSuite has no page footer. This is one quiet 11px line, kept only
+/* Bettsuite has no page footer. This is one quiet 11px line, kept only
    because the site owes visitors a session-replay disclosure. */
 .ns-footer {
   flex: none;

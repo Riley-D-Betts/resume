@@ -22,7 +22,7 @@ async function logout() {
     <header class="ops-strip">
       <span class="ops-strip__id label">
         <StatusLamp color="teal" />
-        OPS CONSOLE // CLEARANCE: GOD KING OF NETSUITE
+        OPS CONSOLE // CLEARANCE: GOD KING OF BETTSUITE
       </span>
       <nav class="ops-strip__nav label" aria-label="Ops console">
         <NuxtLink

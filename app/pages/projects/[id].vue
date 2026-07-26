@@ -5,7 +5,7 @@ const route = useRoute()
 const p = resume.projects.find((x) => x.id === route.params.id)
 if (!p) throw createError({ statusCode: 404, statusMessage: 'Project not found', fatal: true })
 
-useHead({ title: `Project: ${p.name} | NetSuite` })
+useHead({ title: `Project: ${p.name} | Bettsuite` })
 
 const toast = useToast()
 

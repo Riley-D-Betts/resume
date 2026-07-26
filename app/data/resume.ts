@@ -2,7 +2,7 @@
    RESUME CONTENT — the single source of every visible word.
    Edit this file to change anything the site says.
 
-   The site presents Riley Betts' résumé as a mock NetSuite ERP
+   The site presents Riley Betts' résumé as a mock Bettsuite ERP
    account: an Employee record, an Employment History list,
    Project records, a Subsidiary (Fobech) and a Home dashboard
    of portlets. Components render from this file and only from
@@ -21,8 +21,8 @@ export interface StatusReadout {
   live?: 'uptime' | 'clock'
 }
 
-/* ---- NetSuite chrome ---------------------------------------
-   NetSuite's menus are strictly SINGLE COLUMN: one label per row,
+/* ---- Bettsuite chrome ---------------------------------------
+   Bettsuite's menus are strictly SINGLE COLUMN: one label per row,
    no category headings inside the panel and no descriptive
    subtext. Rows with children show a right chevron and open a
    flyout butted against the parent panel. Every menu's first row
@@ -38,7 +38,7 @@ export interface NavLink {
 export interface NavTab {
   id: string
   label: string
-  /** the three icon-only tabs NetSuite pins to the far left */
+  /** the three icon-only tabs Bettsuite pins to the far left */
   icon?: 'recent' | 'shortcuts' | 'home'
   to?: string
   items?: NavLink[]
@@ -184,9 +184,9 @@ export interface ResumeContent {
     timezone: string
   }
   nav: NavTab[]
-  /** the flyout NetSuite's star (Shortcuts) tab opens */
+  /** the flyout Bettsuite's star (Shortcuts) tab opens */
   shortcutsMenu: NavLink[]
-  /** the flyout NetSuite's clock (Recent Records) tab opens */
+  /** the flyout Bettsuite's clock (Recent Records) tab opens */
   recentMenu: NavLink[]
   dashboard: {
     greeting: string
@@ -238,13 +238,13 @@ export interface ResumeContent {
 
 export const resume: ResumeContent = {
   meta: {
-    title: 'Riley Betts — Home | NetSuite',
+    title: 'Riley Betts — Home | Bettsuite',
     description:
-      'Riley Betts — IT Manager at Ida Milk, LLC (Suntado) and founder of Fobech. A résumé built as a working mock NetSuite ERP account.',
+      'Riley Betts — IT Manager at Ida Milk, LLC (Suntado) and founder of Fobech. A résumé built as a working mock Bettsuite ERP account.',
   },
 
   account: {
-    product: 'NetSuite',
+    product: 'Bettsuite',
     edition: 'Personnel Account',
     personName: 'Riley Betts',
     roleLabel: 'Administrator',
@@ -266,11 +266,11 @@ export const resume: ResumeContent = {
     timezone: 'America/Boise',
   },
 
-  /* NetSuite's real Administrator menu bar, in NetSuite's real order.
+  /* Bettsuite's real Administrator menu bar, in Bettsuite's real order.
      The three icon tabs (clock / star / house) come first, exactly as
-     NetSuite pins them. Menus are single-column; every menu opens with
+     Bettsuite pins them. Menus are single-column; every menu opens with
      "<Tab> Overview" and a separator. The structure is genuine
-     NetSuite; the rows underneath are this résumé's records. */
+     Bettsuite; the rows underneath are this résumé's records. */
   nav: [
     { id: 'recent', label: 'Recent Records', icon: 'recent' },
     { id: 'shortcuts', label: 'Shortcuts', icon: 'shortcuts' },
@@ -541,7 +541,7 @@ export const resume: ResumeContent = {
         { label: 'Floor Systems', pct: 88, note: 'MES, Andon, AI vision, ESP32' },
       ],
     },
-    tip: 'This account is a résumé. Every portlet, record and list is real information about Riley Betts, arranged the way NetSuite would arrange it.',
+    tip: 'This account is a résumé. Every portlet, record and list is real information about Riley Betts, arranged the way Bettsuite would arrange it.',
   },
 
   employee: {
@@ -834,7 +834,7 @@ export const resume: ResumeContent = {
       'Consulting / systems help',
       'Just saying hello',
     ],
-    footer: '© 2026 Riley Betts · Built with Nuxt · A résumé wearing a NetSuite costume · No templates harmed',
+    footer: '© 2026 Riley Betts · Built with Nuxt · A résumé wearing a Bettsuite costume · No templates harmed',
     privacyNotice:
       'This site runs self-hosted, first-party analytics, including sampled session replay. No third parties. Data stays on my server.',
   },
@@ -848,7 +848,7 @@ export const resume: ResumeContent = {
       ' |____/ \\___/|_| \\_| |_/_/   \\_\\____/ \\___/',
       '',
       '⚠ Authorized personnel only.',
-      'signed, the God King of NetSuite',
+      'signed, the God King of Bettsuite',
     ],
     consoleHint: 'type ns.help() for the maintenance interface.',
     toast: 'Role Center refreshed. Nice reflexes.',

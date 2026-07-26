@@ -1,19 +1,19 @@
-# RILEY BETTS — RÉSUMÉ (MOCK NETSUITE UI)
+# RILEY BETTS — RÉSUMÉ (MOCK BETTSUITE UI)
 
-A résumé built as a working mock Oracle NetSuite ERP account. The career
-is presented the way NetSuite presents data: a Home dashboard (Role
+A résumé built as a working mock Riley Bettsuite ERP account. The career
+is presented the way Bettsuite presents data: a Home dashboard (Role
 Center) of portlets, an Employee record with subtabs and sublists, an
 Employment History list, Project records and a Fobech "subsidiary".
 
-The costume is built against NetSuite's own published design tokens and
-Oracle's own screenshots rather than from memory, so the details are the
-real ones: the light `#f1efed` masthead with its stacked ORACLE/NetSuite
+The costume is built against Bettsuite's own published design tokens and
+Riley's own screenshots rather than from memory, so the details are the
+real ones: the light `#f1efed` masthead with its stacked RILEY/Bettsuite
 lockup, the flat `#325c72` Main Menu with icon-only Recent Records /
 Shortcuts / Home tabs, single-column dropdowns opening with
 "<Tab> Overview", full-bleed white record pages with no card, field
 labels above their values in 12px uppercase, flat `#DFE4EB` group bars,
 subtabs that are bold-plus-underline rather than folder tabs, and
-sublists with NetSuite's signature pale-yellow row hover.
+sublists with Bettsuite's signature pale-yellow row hover.
 
 Global search, the menu flyouts, sortable and filterable lists,
 collapsible portlets, subtab switching and the contact form all work.
@@ -48,15 +48,15 @@ Dev mode runs without secrets. A production build refuses to boot until
 ## SEG 02 // EDITING CONTENT
 
 Every word on the page lives in `app/data/resume.ts`, the single source of
-truth, shaped as NetSuite records: the account/masthead, the Main Menu
+truth, shaped as Bettsuite records: the account/masthead, the Main Menu
 tree, the Employee record and its skills, dashboard
 KPIs/meter/trend/reminders, the work history positions, project records,
 the Fobech subsidiary and contact details. Edit that one typed file and
 the site follows.
 
 Components never hardcode copy; if you want to change what the site says,
-you never have to touch a `.vue` file. The NetSuite look lives in
-`app/assets/css/netsuite.css` (scoped under `body.ns`); the private `/ops`
+you never have to touch a `.vue` file. The Bettsuite look lives in
+`app/assets/css/bettsuite.css` (scoped under `body.ns`); the private `/ops`
 console keeps its own dark theme from `tokens.css` / `base.css`.
 
 ## SEG 03 // BUILD & SELF-HOST (BARE)

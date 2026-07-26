@@ -4,8 +4,8 @@ import { resume } from '~/data/resume'
 useHead({ title: resume.meta.title })
 
 /**
- * The Home dashboard — NetSuite's "Role Center".
- * NetSuite's Home page deliberately has NO breadcrumb, NO page-title
+ * The Home dashboard — Bettsuite's "Role Center".
+ * Bettsuite's Home page deliberately has NO breadcrumb, NO page-title
  * bar and NO action buttons: the menu bar sits directly above the
  * portlet grid, with only a right-aligned link row for chrome.
  */

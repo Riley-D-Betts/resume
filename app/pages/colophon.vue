@@ -1,5 +1,5 @@
 <script setup lang="ts">
-useHead({ title: 'Script: How This Site Was Built | NetSuite' })
+useHead({ title: 'Script: How This Site Was Built | Bettsuite' })
 
 const toast = useToast()
 
@@ -19,13 +19,13 @@ const stack = {
 
 const notes = [
   'Every visible word comes from one typed file — app/data/resume.ts. Components render from it and nothing hardcodes copy, so the résumé is edited in one place.',
-  'The NetSuite costume is a hand-written stylesheet scoped under a single body class. Behind a password at /ops sits a completely different dark console — first-party analytics with session replay, no third-party trackers, all of it on the same box that serves this page.',
-  'No UI kit, no component library, no template. The masthead, the menu bar, the field groups and the subtabs are all hand-rolled CSS, built against NetSuite’s own published design tokens rather than from memory. Any resemblance to enterprise software you have suffered through is entirely intentional.',
+  'The Bettsuite costume is a hand-written stylesheet scoped under a single body class. Behind a password at /ops sits a completely different dark console — first-party analytics with session replay, no third-party trackers, all of it on the same box that serves this page.',
+  'No UI kit, no component library, no template. The masthead, the menu bar, the field groups and the subtabs are all hand-rolled CSS, built against Bettsuite’s own published design tokens rather than from memory. Any resemblance to enterprise software you have suffered through is entirely intentional.',
 ]
 
 const sublist = [
   { file: 'app/data/resume.ts', role: 'Content model — the single source of truth' },
-  { file: 'app/assets/css/netsuite.css', role: 'The costume — tokens, chrome, records, lists' },
+  { file: 'app/assets/css/bettsuite.css', role: 'The costume — tokens, chrome, records, lists' },
   { file: 'app/components/ns/*.vue', role: 'Masthead, menu bar, portlets, subtabs, tables' },
   { file: 'app/pages/**', role: 'Dashboard, records, lists, this page' },
   { file: 'server/**', role: 'Analytics intake, /ops API, SQLite access' },
@@ -37,7 +37,7 @@ const sublist = [
 
     <NsRecordHeader
       type="Script"
-      name="customscript_resume_netsuite"
+      name="customscript_resume_bettsuite"
       record-id="1"
      
       status-label="Released"
