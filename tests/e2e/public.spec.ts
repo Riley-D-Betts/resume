@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 
 /**
- * Public site contract: the mock-NetSuite résumé renders its Role
+ * Public site contract: the mock-Bettsuite résumé renders its Role
  * Center, navigates between records, and stays free of console errors.
  * Runs in both projects (desktop + mobile). Screenshots land in
  * test-results/screens/ (run playwright from the repo root).
@@ -26,11 +26,11 @@ test('role center renders, records navigate, zero console errors', async ({ page
 
   // -- Home dashboard (Role Center) ------------------------------------
   await page.goto('/')
-  await expect(page.getByLabel('Oracle NetSuite home')).toBeVisible()
+  await expect(page.getByLabel('Riley Bettsuite home')).toBeVisible()
   await expect(page.getByText('Welcome, Riley')).toBeVisible()
   await expect(page.getByText('Key Performance Indicators')).toBeVisible()
   await expect(page.getByText('Reminders', { exact: true })).toBeVisible()
-  // The main menu carries NetSuite's real tab names. On mobile the menu
+  // The main menu carries Bettsuite's real tab names. On mobile the menu
   // collapses behind the hamburger and leaves the a11y tree entirely, so
   // only assert it on the desktop viewport.
   if ((page.viewportSize()?.width ?? 0) > 900) {
@@ -41,7 +41,7 @@ test('role center renders, records navigate, zero console errors', async ({ page
 
   // -- Employee record -------------------------------------------------
   await page.goto('/employee')
-  // NetSuite's title block: the record TYPE is the heading, the name below
+  // Bettsuite's title block: the record TYPE is the heading, the name below
   await expect(page.getByRole('heading', { name: 'Employee' })).toBeVisible()
   await expect(page.locator('.ns-record-name')).toContainText('Betts, Riley')
   await expect(page.locator('.ns-record-status')).toContainText(/ACTIVE/i)

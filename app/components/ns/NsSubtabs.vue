@@ -1,12 +1,12 @@
 <script setup lang="ts">
 /**
- * NetSuite subtabs. Not folder tabs — flat labels on a #c3d1de bar,
+ * Bettsuite subtabs. Not folder tabs — flat labels on a #c3d1de bar,
  * 14px normal weight, with the active one simply BOLD plus a 2px
  * underline. Any subtab holding data gets a "•" appended.
  */
 const props = defineProps<{ tabs: string[]; empty?: string[] }>()
 
-/** NetSuite bullets only the subtabs that actually contain data. */
+/** Bettsuite bullets only the subtabs that actually contain data. */
 function hasData(t: string): boolean {
   return !(props.empty ?? []).includes(t)
 }

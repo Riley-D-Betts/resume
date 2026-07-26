@@ -10,7 +10,7 @@ const openId = ref<string | null>(null)
 const openChild = ref<string | null>(null)
 const mobileOpen = ref(false)
 
-// which top-level tab owns the current route (NetSuite draws it as a
+// which top-level tab owns the current route (Bettsuite draws it as a
 // solid darker block, not an underline)
 const activeId = computed(() => {
   const p = route.path
@@ -22,7 +22,7 @@ const activeId = computed(() => {
   return ''
 })
 
-// NetSuite's first three tabs are icon-only: a history clock, a star and
+// Bettsuite's first three tabs are icon-only: a history clock, a star and
 // a house. Drawn as monochrome SVG paths so they render identically
 // everywhere (emoji would come out full-colour, and some are tofu).
 const ICONS: Record<string, string> = {
@@ -39,7 +39,7 @@ function itemsFor(tabId: string, items?: NavLink[]): NavLink[] {
   return items ?? []
 }
 
-/** NetSuite prepends "<Tab> Overview" to every menu, then a separator. */
+/** Bettsuite prepends "<Tab> Overview" to every menu, then a separator. */
 function overviewLabel(tab: { id: string; label: string }): string {
   if (tab.id === 'shortcuts') return 'Add To Shortcuts'
   if (tab.id === 'recent') return 'All Recent Records'
@@ -55,7 +55,7 @@ watch(
   },
 )
 
-// NetSuite menus open on HOVER, not click
+// Bettsuite menus open on HOVER, not click
 function open(id: string): void {
   openId.value = id
   openChild.value = null

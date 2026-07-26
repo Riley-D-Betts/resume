@@ -15,26 +15,26 @@ export default defineNuxtConfig({
     '~/assets/css/tokens.css',
     '~/assets/css/base.css',
     '~/assets/css/crt.css',
-    // Public résumé — the NetSuite costume. Scoped under body.ns.
-    '~/assets/css/netsuite.css',
+    // Public résumé — the Bettsuite costume. Scoped under body.ns.
+    '~/assets/css/bettsuite.css',
   ],
 
   app: {
     head: {
-      title: 'Riley Betts — Home | NetSuite',
+      title: 'Riley Betts — Home | Bettsuite',
       htmlAttrs: { lang: 'en' },
       meta: [
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
         {
           name: 'description',
           content:
-            'Riley Betts — IT Manager, Ida Milk (Suntado). A résumé built as a working mock NetSuite ERP account. Founder, Fobech.',
+            'Riley Betts — IT Manager, Ida Milk (Suntado). A résumé built as a working mock Bettsuite ERP account. Founder, Fobech.',
         },
         { name: 'theme-color', content: '#223140' },
-        { property: 'og:title', content: 'Riley Betts — NetSuite Personnel Account' },
+        { property: 'og:title', content: 'Riley Betts — Bettsuite Personnel Account' },
         {
           property: 'og:description',
-          content: 'IT Manager. Systems builder. Founder of Fobech. This résumé is a working mock NetSuite UI.',
+          content: 'IT Manager. Systems builder. Founder of Fobech. This résumé is a working mock Bettsuite UI.',
         },
         { property: 'og:type', content: 'website' },
       ],

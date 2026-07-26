@@ -41,8 +41,8 @@ body {
   color: #fff;
 }
 
-/* Scoped away from the public site: `body.ns` pages are the NetSuite
-   theme and get their link colour from netsuite.css. A bare `a` rule
+/* Scoped away from the public site: `body.ns` pages are the Bettsuite
+   theme and get their link colour from bettsuite.css. A bare `a` rule
    here would out-specify that file's zero-specificity `:where()` base
    and paint every unclassed public link CRT cyan. */
 body:not(.ns) a {

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
- * A NetSuite record page title block plus its button row.
+ * A Bettsuite record page title block plus its button row.
  *
- * NetSuite's layout, which is the opposite of the obvious one:
+ * Bettsuite's layout, which is the opposite of the obvious one:
  *   line 1 — a 30px record icon + the record TYPE as a big bold
  *            slate-blue heading ("Employee")
  *   line 2 — the record ID in bold slate, then the record NAME at

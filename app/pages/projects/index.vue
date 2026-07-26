@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { resume } from '~/data/resume'
 
-useHead({ title: 'Projects | NetSuite' })
+useHead({ title: 'Projects | Bettsuite' })
 
 const toast = useToast()
 

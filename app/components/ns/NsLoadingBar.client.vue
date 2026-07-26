@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** The thin blue progress bar NetSuite runs on every navigation. */
+/** The thin blue progress bar Bettsuite runs on every navigation. */
 const width = ref(0)
 const visible = ref(false)
 let creep: ReturnType<typeof setInterval> | undefined

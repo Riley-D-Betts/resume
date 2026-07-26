@@ -30,7 +30,7 @@ const active = ref(props.points.length - 1)
 <template>
   <div class="ns-trend">
     <svg viewBox="0 0 300 116" width="100%" height="116" role="img" :aria-label="title">
-      <!-- plot frame + gridlines, like NetSuite's trend graph -->
+      <!-- plot frame + gridlines, like Bettsuite's trend graph -->
       <rect x="10" y="12" width="280" height="82" fill="none" stroke="#dfe4eb" stroke-width="1" />
       <line x1="10" y1="39" x2="290" y2="39" stroke="#eff1f5" stroke-width="1" />
       <line x1="10" y1="66" x2="290" y2="66" stroke="#eff1f5" stroke-width="1" />

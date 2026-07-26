@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** A list/page heading, styled like NetSuite's record-type heading. */
+/** A list/page heading, styled like Bettsuite's record-type heading. */
 defineProps<{ title: string; subtitle?: string }>()
 </script>
 

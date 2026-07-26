@@ -7,7 +7,7 @@ interface Item {
 }
 
 /**
- * NetSuite's "Actions" / "More" menu is a BORDERLESS text menu with a
+ * Bettsuite's "Actions" / "More" menu is a BORDERLESS text menu with a
  * small triangle — not a bordered button.
  */
 withDefaults(defineProps<{ label?: string; items: Item[] }>(), { label: 'Actions' })

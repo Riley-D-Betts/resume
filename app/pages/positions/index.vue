@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { resume } from '~/data/resume'
 
-useHead({ title: 'Employment History | NetSuite' })
+useHead({ title: 'Employment History | Bettsuite' })
 
 const toast = useToast()
 
@@ -44,7 +44,7 @@ const rows = computed(() =>
 
 <template>
   <div data-section="positions">
-    <!-- NetSuite list pages carry no breadcrumb and no subtitle: just the
+    <!-- Bettsuite list pages carry no breadcrumb and no subtitle: just the
          record icon and the list name as the page heading. -->
     <div class="ns-pagetitle">
       <div class="ns-pagetitle__first">
@@ -52,7 +52,7 @@ const rows = computed(() =>
       </div>
     </div>
 
-    <!-- Control bar order is NetSuite's: View → select → Customize View →
+    <!-- Control bar order is Bettsuite's: View → select → Customize View →
          separator → the New button (which is never first). -->
     <div class="ns-controlbar">
       <span class="ns-listbar__label">View</span>

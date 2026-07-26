@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
- * A NetSuite dashboard portlet.
+ * A Bettsuite dashboard portlet.
  *
- * NetSuite behaviours reproduced here:
+ * Bettsuite behaviours reproduced here:
  *  - the title bar is the drag handle AND the minimize toggle
  *  - controls stay hidden until the pointer is over the portlet
  *  - the primary control is ONE dropdown caret whose menu holds
