@@ -38,7 +38,7 @@ const locked = () => toast.show('This dashboard is Locked — content and layout
   <div data-section="home">
     <div class="ns-dashbar">
       <span class="ns-dashbar__spacer ns-dashbar__greet">
-        <b>{{ d.greeting }}</b> — {{ account.accountName }} · {{ account.roleLabel }}
+        <b>{{ d.greeting }}</b> — {{ account.edition }} · {{ account.roleLabel }}
       </span>
       <button type="button" class="ns-linkish" @click="locked">Personalize</button>
       <button type="button" class="ns-linkish" @click="locked">Layout</button>
@@ -114,13 +114,6 @@ const locked = () => toast.show('This dashboard is Locked — content and layout
             <NuxtLink to="/positions">Open Employment History</NuxtLink>
           </template>
         </NsPortlet>
-
-        <NsPortlet title="Report Snapshots">
-          <NsReport :rows="d.report.rows" />
-          <template #foot>
-            <NuxtLink to="/employee">Skills Coverage by Discipline — view full report</NuxtLink>
-          </template>
-        </NsPortlet>
       </div>
 
       <!-- Narrow right column -->
@@ -149,6 +142,13 @@ const locked = () => toast.show('This dashboard is Locked — content and layout
               <span class="ns-recent__type">{{ rec.type }}</span>
             </component>
           </ul>
+        </NsPortlet>
+
+        <NsPortlet title="Report Snapshots">
+          <NsReport :rows="d.report.rows" />
+          <template #foot>
+            <NuxtLink to="/employee">Skills Coverage by Discipline — view full report</NuxtLink>
+          </template>
         </NsPortlet>
       </div>
     </div>
