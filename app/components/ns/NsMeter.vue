@@ -31,7 +31,14 @@ const needle = computed(() => {
 
 <template>
   <div class="ns-meter">
-    <svg viewBox="0 0 200 118" width="100%" height="118" role="img" :aria-label="`${label}: ${value}`">
+    <!-- capped so the dial stays dial-sized in a wide column -->
+    <svg
+      viewBox="0 0 200 118"
+      width="100%"
+      style="height: auto; aspect-ratio: 200 / 118; max-width: 280px; display: block; margin: 0 auto"
+      role="img"
+      :aria-label="`${label}: ${value}`"
+    >
       <path d="M20,100 A80,80 0 0 1 180,100" fill="none" stroke="#dfe4eb" stroke-width="16" />
       <path
         d="M20,100 A80,80 0 0 1 180,100"

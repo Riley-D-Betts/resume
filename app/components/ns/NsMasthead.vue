@@ -57,7 +57,7 @@ function onBlur(): void {
       <span class="ns-logo__word">Bettsuite</span>
     </NuxtLink>
 
-    <span class="ns-logo__sub">{{ account.accountName }}</span>
+    <span class="ns-logo__sub">{{ account.edition }}</span>
 
     <div class="ns-search" role="search">
       <svg class="ns-search__icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">

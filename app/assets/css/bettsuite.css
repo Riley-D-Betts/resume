@@ -867,16 +867,19 @@ body.ns :focus-visible {
 .ns-fieldgroup + .ns-subtabs {
   margin-top: 15px;
 }
+/* Two-column field fill is COLUMN-major (first half of the fields down
+   the left column, second half down the right), with a real gutter so
+   the right column's labels don't crowd the left column's values. */
 .ns-fields {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0;
+  columns: 2;
+  column-gap: 32px;
 }
 .ns-fields--one {
-  grid-template-columns: 1fr;
+  columns: 1;
 }
 .ns-field {
-  margin: 0 10px 2px 0;
+  margin: 0 0 2px;
+  break-inside: avoid;
 }
 .ns-field__label {
   display: block;
@@ -1256,8 +1259,14 @@ body.ns :focus-visible {
   .ns-dash {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
+  /* When the third column drops below the first two, lay its portlets
+     out side by side instead of stretching them across the full width. */
   .ns-dash__col--3 {
     grid-column: span 2;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 8px;
+    align-items: start;
   }
 }
 @media (max-width: 760px) {
@@ -1266,6 +1275,7 @@ body.ns :focus-visible {
   }
   .ns-dash__col--3 {
     grid-column: auto;
+    display: block;
   }
 }
 .ns-dashbar {
@@ -1368,6 +1378,24 @@ body.ns :focus-visible {
   color: var(--ns-muted);
 }
 
+.ns-trend__axis {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 4px 0;
+}
+.ns-trend__year {
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--ns-muted);
+  background: none;
+  border: none;
+  padding: 0 2px;
+  cursor: pointer;
+}
+.ns-trend__year--on {
+  color: var(--ns-ink);
+  font-weight: 700;
+}
 .ns-trend__caption {
   display: flex;
   justify-content: space-between;
@@ -1524,6 +1552,10 @@ a.ns-remind__item:hover .ns-remind__count {
   line-height: 17px;
   color: var(--ns-ink-soft);
 }
+/* Long prose keeps a readable measure instead of spanning the page */
+.ns-prose {
+  max-width: 90ch;
+}
 .ns-prose p {
   margin-bottom: 8px;
   color: var(--ns-value);
@@ -1609,7 +1641,12 @@ a.ns-remind__item:hover .ns-remind__count {
     padding: 5px 10px 24px;
   }
   .ns-fields {
-    grid-template-columns: 1fr;
+    columns: 1;
+  }
+  /* Record sublists wrap their text on phones instead of clipping
+     mid-word; the dense list pages keep their horizontal scroll. */
+  .ns-subpanel .ns-tablescroll > .ns-table {
+    min-width: 0;
   }
   .ns-nav {
     padding: 0;
