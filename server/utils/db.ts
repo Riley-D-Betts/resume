@@ -1,37 +1,32 @@
-import { mkdirSync } from 'node:fs'
-import { join, resolve } from 'node:path'
-import BetterSqlite3 from 'better-sqlite3'
-import type { Database } from 'better-sqlite3'
-import { migrate } from './migrate'
+import type { D1Database, R2Bucket } from '@cloudflare/workers-types'
+import type { H3Event } from 'h3'
 
-let db: Database | null = null
-
-/** Absolute path of the runtime data directory (DB, replays, geo). */
-export function getDataDir(): string {
-  const cfg = useRuntimeConfig()
-  return resolve(cfg.dataDir || './data')
+/** Bindings declared in wrangler.jsonc. */
+export interface CfBindings {
+  DB: D1Database
+  REPLAYS: R2Bucket
 }
 
-/** Lazily-opened singleton SQLite handle (single-process deployment). */
-export function getDb(): Database {
-  if (!db) {
-    const dir = getDataDir()
-    try {
-      mkdirSync(dir, { recursive: true })
-      db = new BetterSqlite3(join(dir, 'analytics.db'))
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code
-      if (code === 'SQLITE_CANTOPEN' || code === 'EACCES' || code === 'EPERM') {
-        throw new Error(
-          `data dir ${dir} is not writable by uid ${process.getuid?.() ?? '?'}. ` +
-            `In Docker the app runs as the 'node' user (uid 1000) — before first ` +
-            `start run: mkdir -p ./data && sudo chown -R 1000:1000 ./data`,
-          { cause: err },
-        )
-      }
-      throw err
-    }
-    migrate(db)
+/**
+ * Cloudflare env for the current request. Present in production (Workers)
+ * and in `nuxt dev` via nitro-cloudflare-dev; anywhere else this throws.
+ */
+export function getCfEnv(event: H3Event): CfBindings {
+  const env = (event.context.cloudflare as { env?: CfBindings } | undefined)?.env
+  if (!env?.DB) {
+    throw new Error(
+      'Cloudflare bindings unavailable. In dev, run `npm run db:migrate:local` once and use `npm run dev` (nitro-cloudflare-dev provides the bindings).',
+    )
   }
-  return db
+  return env
+}
+
+/** The D1 analytics database for the current request. */
+export function getDb(event: H3Event): D1Database {
+  return getCfEnv(event).DB
+}
+
+/** The R2 bucket holding rrweb replay chunks. */
+export function getReplayBucket(event: H3Event): R2Bucket {
+  return getCfEnv(event).REPLAYS
 }

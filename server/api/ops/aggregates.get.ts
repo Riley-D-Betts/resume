@@ -1,4 +1,4 @@
-import type { Database } from 'better-sqlite3'
+import type { D1Database } from '@cloudflare/workers-types'
 import { requireAdmin } from '../../utils/auth'
 
 const DAY_MS = 86_400_000
@@ -20,14 +20,16 @@ interface KN {
 }
 
 /** Top-12 breakdown of one sessions column within the range. */
-function top(db: Database, expr: string, start: number, bot: string): KN[] {
-  return db
+async function top(db: D1Database, expr: string, start: number, bot: string): Promise<KN[]> {
+  const { results } = await db
     .prepare(
       `SELECT ${expr} AS k, COUNT(*) AS n
        FROM sessions WHERE started_at >= ? ${bot}
        GROUP BY k ORDER BY n DESC LIMIT 12`,
     )
-    .all(start) as KN[]
+    .bind(start)
+    .all<KN>()
+  return results
 }
 
 function parsePayload(raw: string | null): Record<string, unknown> | null {
@@ -52,47 +54,58 @@ export default defineEventHandler(async (event) => {
   const start = rangeStart(q.range)
   const bot = q.bots === '1' ? '' : 'AND is_bot = 0'
   const botJoin = q.bots === '1' ? '' : 'AND s.is_bot = 0'
-  const db = getDb()
+  const db = getDb(event)
 
-  const referrers = top(db, `COALESCE(NULLIF(referrer, ''), '(direct)')`, start, bot)
-  const countries = top(db, `COALESCE(NULLIF(country, ''), '??')`, start, bot)
-  const cities = top(db, `COALESCE(NULLIF(city, ''), '??')`, start, bot)
-  const devices = top(db, `COALESCE(NULLIF(device_type, ''), '??')`, start, bot)
-  const browsers = top(db, `COALESCE(NULLIF(browser, ''), '??')`, start, bot)
-  const languages = top(db, `COALESCE(NULLIF(lang, ''), '??')`, start, bot)
+  const [referrers, countries, cities, devices, browsers, languages, dwellRes, funnelRes, errorRes]
+    = await Promise.all([
+      top(db, `COALESCE(NULLIF(referrer, ''), '(direct)')`, start, bot),
+      top(db, `COALESCE(NULLIF(country, ''), '??')`, start, bot),
+      top(db, `COALESCE(NULLIF(city, ''), '??')`, start, bot),
+      top(db, `COALESCE(NULLIF(device_type, ''), '??')`, start, bot),
+      top(db, `COALESCE(NULLIF(browser, ''), '??')`, start, bot),
+      top(db, `COALESCE(NULLIF(lang, ''), '??')`, start, bot),
+      db.prepare(
+        `SELECT e.name AS section,
+                CAST(ROUND(AVG(CAST(json_extract(e.payload, '$.dwellMs') AS REAL))) AS INTEGER) AS avgMs,
+                COUNT(*) AS n
+         FROM events e JOIN sessions s ON s.sid = e.sid
+         WHERE e.type = 'section_exit' AND e.name IS NOT NULL AND e.ts >= ? ${botJoin}
+         GROUP BY e.name ORDER BY avgMs DESC`,
+      )
+        .bind(start)
+        .all<{ section: string, avgMs: number, n: number }>(),
+      db.prepare(
+        `SELECT CAST(json_extract(e.payload, '$.pct') AS INTEGER) AS pct,
+                COUNT(DISTINCT e.sid) AS sessions
+         FROM events e JOIN sessions s ON s.sid = e.sid
+         WHERE e.type = 'scroll_depth' AND e.ts >= ? ${botJoin}
+         GROUP BY pct`,
+      )
+        .bind(start)
+        .all<{ pct: number, sessions: number }>(),
+      db.prepare(
+        `SELECT e.ts AS ts, e.payload AS payload
+         FROM events e JOIN sessions s ON s.sid = e.sid
+         WHERE e.type = 'js_error' AND e.ts >= ? ${botJoin}
+         ORDER BY e.ts DESC LIMIT 20`,
+      )
+        .bind(start)
+        .all<{ ts: number, payload: string | null }>(),
+    ])
 
-  const sectionDwell = db
-    .prepare(
-      `SELECT e.name AS section,
-              CAST(ROUND(AVG(CAST(json_extract(e.payload, '$.dwellMs') AS REAL))) AS INTEGER) AS avgMs,
-              COUNT(*) AS n
-       FROM events e JOIN sessions s ON s.sid = e.sid
-       WHERE e.type = 'section_exit' AND e.name IS NOT NULL AND e.ts >= ? ${botJoin}
-       GROUP BY e.name ORDER BY avgMs DESC`,
-    )
-    .all(start) as { section: string; avgMs: number; n: number }[]
-
-  const funnelRows = db
-    .prepare(
-      `SELECT CAST(json_extract(e.payload, '$.pct') AS INTEGER) AS pct,
-              COUNT(DISTINCT e.sid) AS sessions
-       FROM events e JOIN sessions s ON s.sid = e.sid
-       WHERE e.type = 'scroll_depth' AND e.ts >= ? ${botJoin}
-       GROUP BY pct`,
-    )
-    .all(start) as { pct: number; sessions: number }[]
-  const byPct = new Map(funnelRows.map(r => [r.pct, r.sessions]))
+  const byPct = new Map(funnelRes.results.map(r => [r.pct, r.sessions]))
   const scrollFunnel = SCROLL_MILESTONES.map(pct => ({ pct, sessions: byPct.get(pct) ?? 0 }))
+  const errors = errorRes.results.map(r => ({ ts: r.ts, payload: parsePayload(r.payload) }))
 
-  const errorRows = db
-    .prepare(
-      `SELECT e.ts AS ts, e.payload AS payload
-       FROM events e JOIN sessions s ON s.sid = e.sid
-       WHERE e.type = 'js_error' AND e.ts >= ? ${botJoin}
-       ORDER BY e.ts DESC LIMIT 20`,
-    )
-    .all(start) as { ts: number; payload: string | null }[]
-  const errors = errorRows.map(r => ({ ts: r.ts, payload: parsePayload(r.payload) }))
-
-  return { referrers, countries, cities, devices, browsers, languages, sectionDwell, scrollFunnel, errors }
+  return {
+    referrers,
+    countries,
+    cities,
+    devices,
+    browsers,
+    languages,
+    sectionDwell: dwellRes.results,
+    scrollFunnel,
+    errors,
+  }
 })

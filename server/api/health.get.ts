@@ -1,10 +1,10 @@
-export default defineEventHandler(() => {
+export default defineEventHandler(async (event) => {
   let dbOk = false
   try {
-    getDb().prepare('SELECT 1').get()
+    await getDb(event).prepare('SELECT 1').first()
     dbOk = true
   } catch {
-    // db unreachable — still report the process as alive
+    // db unreachable — still report the worker as alive
   }
   return { ok: true, db: dbOk }
 })

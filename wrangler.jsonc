@@ -1,0 +1,49 @@
+// Cloudflare Workers deployment config. Everything here fits the free plan:
+// Workers (100k req/day), D1 (5GB), R2 (10GB), cron triggers.
+//
+// One-time setup (after `npx wrangler login`):
+//   npx wrangler d1 create resume-analytics   → paste database_id below
+//   npx wrangler r2 bucket create resume-replays
+//   npm run db:migrate:remote
+//   npx wrangler secret put NUXT_ADMIN_PASSWORD
+//   npx wrangler secret put NUXT_SESSION_PASSWORD
+//   npm run deploy
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "riley-betts-resume",
+  "main": "./.output/server/index.mjs",
+  "compatibility_date": "2026-07-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./.output/public/",
+    "binding": "ASSETS"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "resume-analytics",
+      "database_id": "REPLACE_WITH_OUTPUT_OF_wrangler_d1_create",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "REPLAYS",
+      "bucket_name": "resume-replays"
+    }
+  ],
+  // Daily prune: replay/event retention + replay storage cap.
+  "triggers": {
+    "crons": ["17 9 * * *"]
+  },
+  // Non-secret runtime config. NUXT_ADMIN_PASSWORD and NUXT_SESSION_PASSWORD
+  // are secrets — set them with `wrangler secret put`, never here.
+  "vars": {
+    "NUXT_REPLAY_RETENTION_DAYS": "30",
+    "NUXT_EVENT_RETENTION_DAYS": "180",
+    "NUXT_IP_ANONYMIZE": "false"
+  }
+}

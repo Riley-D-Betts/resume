@@ -42,13 +42,15 @@ export default defineEventHandler(async (event) => {
   }
   const cond = where.join(' AND ')
 
-  const db = getDb()
-  const total = (
-    db.prepare(`SELECT COUNT(*) AS n FROM sessions WHERE ${cond}`).get(...args) as { n: number }
-  ).n
-  const rows = db
-    .prepare(`SELECT * FROM sessions WHERE ${cond} ORDER BY started_at DESC LIMIT ? OFFSET ?`)
-    .all(...args, limit, offset) as Record<string, unknown>[]
+  const db = getDb(event)
+  const [totalRow, rowsRes] = await Promise.all([
+    db.prepare(`SELECT COUNT(*) AS n FROM sessions WHERE ${cond}`)
+      .bind(...args)
+      .first<{ n: number }>(),
+    db.prepare(`SELECT * FROM sessions WHERE ${cond} ORDER BY started_at DESC LIMIT ? OFFSET ?`)
+      .bind(...args, limit, offset)
+      .all<Record<string, unknown>>(),
+  ])
 
-  return { total, rows }
+  return { total: totalRow!.n, rows: rowsRes.results }
 })

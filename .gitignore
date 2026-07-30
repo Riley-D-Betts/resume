@@ -13,8 +13,11 @@ npm-debug.log*
 .env.*
 !.env.example
 
-# Runtime data (analytics DB, replays, geo DB)
+# Runtime data (legacy self-hosted analytics DB / replays)
 /data/
+
+# Wrangler local state (dev D1/R2 simulation)
+.wrangler/
 
 # Playwright
 test-results/
