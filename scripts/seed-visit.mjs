@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 /**
  * Seed a realistic synthetic visit through the REAL analytics pipeline of a
- * running server, then verify what landed in SQLite and on disk.
+ * running server, then verify what landed in the local D1 database.
  *
  *   node scripts/seed-visit.mjs [baseUrl] [dbPath]
  *
- * Defaults: http://localhost:3000 and ./data/analytics.db (run from the
- * repo root, against `npm run dev` or a production build).
+ * Defaults: http://localhost:3000 and the local D1 SQLite file miniflare
+ * keeps under .wrangler/state (both `npm run dev` and `npm run preview`
+ * write there). Run `npm run db:migrate:local` once before first use.
  *
  * Prints PASS/FAIL per assertion and exits 1 if any assertion failed.
  *
@@ -16,14 +17,24 @@
  * server between runs.
  */
 
-import { existsSync } from 'node:fs'
+import { existsSync, readdirSync, statSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
-import { dirname, join, resolve } from 'node:path'
+import { join, resolve } from 'node:path'
 import { gzipSync } from 'node:zlib'
-import Database from 'better-sqlite3'
+import { DatabaseSync } from 'node:sqlite'
+
+/** Newest .sqlite under miniflare's local D1 state — the dev database. */
+function findLocalD1() {
+  const dir = resolve('.wrangler/state/v3/d1/miniflare-D1DatabaseObject')
+  if (!existsSync(dir)) return null
+  const files = readdirSync(dir).filter(f => f.endsWith('.sqlite'))
+  if (files.length === 0) return null
+  files.sort((a, b) => statSync(join(dir, b)).mtimeMs - statSync(join(dir, a)).mtimeMs)
+  return join(dir, files[0])
+}
 
 const baseUrl = (process.argv[2] ?? 'http://localhost:3000').replace(/\/+$/, '')
-const dbPath = resolve(process.argv[3] ?? './data/analytics.db')
+const dbPath = process.argv[3] ? resolve(process.argv[3]) : findLocalD1()
 
 const CHROME_UA
   = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
@@ -219,11 +230,11 @@ async function main() {
   check('replay: chunk seq 0 accepted (204)', resR0.status === 204, `status ${resR0.status}`)
   check('replay: chunk seq 1 accepted (204)', resR1.status === 204, `status ${resR1.status}`)
 
-  // d. verify what landed, straight from the SQLite file
-  if (!existsSync(dbPath)) {
-    check(`db: file exists at ${dbPath}`, false, 'wrong dbPath? pass it as argv[3]')
+  // d. verify what landed, straight from the local D1 SQLite file
+  if (!dbPath || !existsSync(dbPath)) {
+    check('db: local D1 sqlite file found', false, 'run `npm run db:migrate:local` first, or pass the path as argv[3]')
   } else {
-    const db = new Database(dbPath, { readonly: true, fileMustExist: true })
+    const db = new DatabaseSync(dbPath, { readOnly: true })
     try {
       const visitor = db.prepare('SELECT * FROM visitors WHERE vid = ?').get(vid)
       check('db: visitors row exists', visitor !== undefined)
@@ -248,10 +259,11 @@ async function main() {
       const { n: chunkCount } = db.prepare('SELECT COUNT(*) AS n FROM replay_chunks WHERE sid = ?').get(sid)
       check('db: 2 replay_chunks rows', chunkCount === 2, `got ${chunkCount}`)
 
-      const replayDir = join(dirname(dbPath), 'replays', sid)
+      // Chunk bodies live in R2 now (locally simulated by miniflare), so
+      // assert the per-seq accounting rows instead of files on disk.
       for (const seq of [0, 1]) {
-        const file = join(replayDir, `${String(seq).padStart(5, '0')}.json.gz`)
-        check(`fs: replay chunk file ${String(seq).padStart(5, '0')}.json.gz exists`, existsSync(file), file)
+        const row = db.prepare('SELECT bytes, compressed FROM replay_chunks WHERE sid = ? AND seq = ?').get(sid, seq)
+        check(`db: replay chunk seq ${seq} recorded gzipped with bytes > 0`, row !== undefined && row.bytes > 0 && row.compressed === 1)
       }
     } finally {
       db.close()
@@ -266,8 +278,8 @@ async function main() {
     'curl/8.0',
   )
   check('collect: bot envelope accepted (204)', resBot.status === 204, `status ${resBot.status}`)
-  if (existsSync(dbPath)) {
-    const db = new Database(dbPath, { readonly: true, fileMustExist: true })
+  if (dbPath && existsSync(dbPath)) {
+    const db = new DatabaseSync(dbPath, { readOnly: true })
     try {
       const botSession = db.prepare('SELECT is_bot FROM sessions WHERE sid = ?').get(botSid)
       check('db: curl/8.0 session flagged is_bot = 1', botSession?.is_bot === 1, `got ${botSession?.is_bot}`)
@@ -295,6 +307,6 @@ async function main() {
 
 main().catch((err) => {
   console.error(`FAIL  seed-visit crashed: ${err?.message ?? err}`)
-  console.error('      is the server running? start it with: npm run dev (or node .output/server/index.mjs)')
+  console.error('      is the server running? start it with: npm run dev (or npm run preview after a build)')
   process.exit(1)
 })

@@ -19,8 +19,9 @@ Global search, the menu flyouts, sortable and filterable lists,
 collapsible portlets, subtab switching and the contact form all work.
 
 Underneath it runs its own first-party analytics pipeline, session replay
-included. No third-party trackers, nothing leaves the box. One Node
-process, one SQLite file.
+included. No third-party trackers, nothing leaves the account. It deploys
+to Cloudflare Workers: D1 holds the analytics, R2 holds the replay
+chunks, a cron trigger prunes both — all inside the free tier.
 
 | Route | What |
 | --- | --- |
@@ -39,11 +40,13 @@ process, one SQLite file.
 
 ```sh
 npm install
-npm run dev        # http://localhost:3000
+npm run db:migrate:local   # once: create the local D1 schema
+npm run dev                # http://localhost:3000
 ```
 
-Dev mode runs without secrets. A production build refuses to boot until
-`NUXT_ADMIN_PASSWORD` and `NUXT_SESSION_PASSWORD` (32+ chars) are set.
+Dev mode runs without secrets (the /ops password is `dev`).
+`nitro-cloudflare-dev` provides the D1/R2 bindings from `wrangler.jsonc`
+inside `nuxt dev`; local state lives under `.wrangler/state/`.
 
 ## SEG 02 // EDITING CONTENT
 
@@ -59,114 +62,77 @@ you never have to touch a `.vue` file. The Bettsuite look lives in
 `app/assets/css/bettsuite.css` (scoped under `body.ns`); the private `/ops`
 console keeps its own dark theme from `tokens.css` / `base.css`.
 
-## SEG 03 // BUILD & SELF-HOST (BARE)
+## SEG 03 // DEPLOY (CLOUDFLARE WORKERS, FREE TIER)
+
+One-time setup:
 
 ```sh
-npm run build
-
-NUXT_ADMIN_PASSWORD='choose-a-password' \
-NUXT_SESSION_PASSWORD="$(openssl rand -hex 32)" \
-node .output/server/index.mjs
+npx wrangler login
+npx wrangler d1 create resume-analytics    # paste database_id into wrangler.jsonc
+npx wrangler r2 bucket create resume-replays
+npm run db:migrate:remote                  # apply the schema to the real D1
+npx wrangler secret put NUXT_ADMIN_PASSWORD
+npx wrangler secret put NUXT_SESSION_PASSWORD   # 32+ chars: openssl rand -hex 32
 ```
 
-Listens on `:3000` (`NITRO_PORT` to change). All runtime data (SQLite DB,
-replay files, GeoIP database) lands in `./data`; move it with
-`NUXT_DATA_DIR`. The `.output` directory is fully self-contained, including
-the better-sqlite3 native binding, so build on the same OS/arch/Node you
-deploy on.
-
-## SEG 04 // DOCKER
+Then, and for every deploy after:
 
 ```sh
-cp .env.example .env    # fill in both passwords
-mkdir -p data && sudo chown -R 1000:1000 data   # container runs as uid 1000
-docker compose up -d --build
+npm run deploy        # nuxt build + wrangler deploy
 ```
 
-Compose fails fast with a readable error if either secret is missing. Data
-persists in `./data` on the host (mounted at `/data` in the container). The
-image is multi-stage on `node:22-alpine`, runs as the unprivileged `node`
-user, and healthchecks `GET /api/health`.
+Attach your domain under Workers → riley-betts-resume → Settings →
+Domains & Routes (the domain's DNS must already be on Cloudflare). The
+free tier covers all of it: 100k requests/day (Workers), 5GB (D1),
+10GB (R2), and the daily prune cron.
 
-## SEG 05 // ENVIRONMENT VARIABLES
+To preview the production build locally before deploying:
+
+```sh
+npm run build && npm run preview   # wrangler dev against local D1/R2 state
+```
+
+## SEG 04 // ENVIRONMENT
+
+Secrets (set with `wrangler secret put`, never in wrangler.jsonc):
+
+| Secret | Purpose |
+| --- | --- |
+| `NUXT_ADMIN_PASSWORD` | Password for the `/ops` console. Unset = /ops disabled (fails closed) |
+| `NUXT_SESSION_PASSWORD` | Signs the admin session cookie; 32+ chars (`openssl rand -hex 32`) |
+
+Plain vars (edit in `wrangler.jsonc` → `vars`):
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `NUXT_ADMIN_PASSWORD` | — (required in prod) | Password for the `/ops` console |
-| `NUXT_SESSION_PASSWORD` | — (required in prod) | Signs the admin session cookie; 32+ chars (`openssl rand -hex 32`) |
-| `NUXT_DATA_DIR` | `./data` (`/data` in Docker) | Where SQLite, replays and the GeoIP db live |
-| `NUXT_TRUST_PROXY` | `true` | Trust `X-Real-IP` / `X-Forwarded-For` for client IPs. Set `false` if exposed directly |
 | `NUXT_IP_ANONYMIZE` | `false` | Store IPs anonymized (last IPv4 octet zeroed / IPv6 truncated to /48) |
-| `NUXT_REPLAY_RETENTION_DAYS` | `30` | Session replay files pruned after this many days |
+| `NUXT_REPLAY_RETENTION_DAYS` | `30` | Session replay chunks pruned after this many days |
 | `NUXT_EVENT_RETENTION_DAYS` | `180` | Raw analytics events pruned after this many days |
-| `NUXT_GEOIP_MMDB_PATH` | auto | Point at an existing `GeoLite2-City.mmdb` instead of auto-downloading |
 | `NUXT_PUBLIC_REPLAY_SAMPLE_RATE` | `1` | Fraction of sessions recorded with rrweb (0..1) |
-| `NITRO_PORT` | `3000` | HTTP port |
 
-## SEG 06 // REVERSE PROXY
-
-Forwarded IP headers are required for real client IPs and geo; without them
-every visitor is the proxy's address.
-
-Caddy (sets `X-Forwarded-For` itself; add `X-Real-IP` explicitly):
-
-```caddy
-resume.example.com {
-    reverse_proxy 127.0.0.1:3000 {
-        header_up X-Real-IP {remote_host}
-    }
-}
-```
-
-nginx:
-
-```nginx
-server {
-    server_name resume.example.com;
-
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    # Defense in depth: allowlist /ops at the proxy on top of its password.
-    location /ops {
-        allow 203.0.113.0/24;   # your networks
-        deny  all;
-        proxy_pass http://127.0.0.1:3000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    }
-}
-```
-
-If the app is exposed **directly** (no proxy), set `NUXT_TRUST_PROXY=false`
-so clients can't spoof their IP with a forged header.
-
-## SEG 07 // THE ANALYTICS
+## SEG 05 // THE ANALYTICS
 
 ### What is collected
 
 Pageviews (referrer, UTM, screen/viewport, timezone, language, device
 hints), per-section enter/exit with dwell time, scroll-depth milestones,
-clicks, outbound link clicks, device + geo (city level), web vitals
-(TTFB/LCP/CLS/INP), JS errors, active-time heartbeats (each one is 15s of
-visible, non-idle time), easter eggs, and sampled rrweb session replay.
+clicks, outbound link clicks, device + geo (city level, from Cloudflare's
+request metadata — no GeoIP database), web vitals (TTFB/LCP/CLS/INP), JS
+errors, active-time heartbeats (each one is 15s of visible, non-idle
+time), easter eggs, and sampled rrweb session replay.
 
 ### Where it lives
 
-Everything sits under the data dir: `data/analytics.db` (SQLite, WAL) plus
-replay chunks as gzipped files under `data/replays/<sid>/`. Nothing is sent
-anywhere else, ever.
+Analytics rows sit in the `resume-analytics` D1 database; replay chunks
+are gzipped objects in the `resume-replays` R2 bucket under
+`replays/<sid>/`. Both live in your own Cloudflare account; nothing is
+sent anywhere else, ever.
 
 ### Retention
 
-Pruning runs inside the server: replays after 30 days, raw events after 180
-days (see env vars above), plus a 2 GB disk cap on the replays directory.
+A daily cron trigger (see `wrangler.jsonc`) prunes replays after 30 days
+and raw events after 180 (see vars above), plus a 2GB cap on total replay
+storage — oldest sessions evicted first.
 
 ### Admin, opt-out, privacy
 
@@ -175,51 +141,41 @@ Visiting any URL with `?optout=1` sets a localStorage flag and that browser
 is never tracked again; the page footer carries a notice.
 
 This is first-party analytics for a personal site. Data is collected by the
-site you're visiting, stored on the box that serves it, and IPs never leave
-that box. Bot traffic is flagged, not counted. For extra caution set
+site you're visiting and stored in the site owner's own Cloudflare account.
+Bot traffic is flagged, not counted. For extra caution set
 `NUXT_IP_ANONYMIZE=true` and IPs are anonymized before they're stored at
-all (geo still resolves; the lookup happens pre-anonymization, in memory).
+all (geo is unaffected — it comes from Cloudflare's edge, not the stored IP).
 
-## SEG 08 // GEOIP
-
-On first boot the server downloads a GeoLite2-City database (via
-`geolite2-redist`, no license key needed) into `data/geo/` in the background.
-Until it arrives (or forever, on an offline box) the console simply shows
-GEO OFFLINE and every other part of the pipeline works normally. Already
-have an `.mmdb`? Point `NUXT_GEOIP_MMDB_PATH` at it and no download happens.
-
-## SEG 09 // BACKUPS
-
-The DB is WAL-mode, so back it up with SQLite's own backup API rather than
-`cp`-ing a live db file:
+## SEG 06 // BACKUPS
 
 ```sh
-sqlite3 data/analytics.db ".backup 'backup/analytics-$(date +%F).db'"
-rsync -a data/replays/ backup/replays/      # replay chunk files
+npx wrangler d1 export resume-analytics --remote --output backup/analytics-$(date +%F).sql
 ```
 
-Restore = stop the server, put the files back, start it.
+Replay chunks in R2 are ephemeral by design (30-day retention); if you
+want them anyway, `rclone` speaks R2's S3 API.
 
-## SEG 10 // TESTING
+## SEG 07 // TESTING
 
 ### Seed + smoke-test the pipeline
 
-With the server running:
+With the dev server running:
 
 ```sh
 npm run seed
-# or explicitly: node scripts/seed-visit.mjs http://localhost:3000 ./data/analytics.db
+# or explicitly: node scripts/seed-visit.mjs http://localhost:3000 [path-to-local-d1.sqlite]
 ```
 
 Sends a realistic synthetic visit (pageview, section dwell, scrolls, clicks,
 outbound, heartbeats, vitals, two gzipped rrweb chunks), then opens the
-SQLite file and asserts everything landed, including rate-limit 429s and
-bot flagging. Prints PASS/FAIL per check, exits 1 on any failure. Its final
-step exhausts the per-IP rate limit, so wait ~60s before re-running.
+local D1 SQLite file (found under `.wrangler/state/`) and asserts everything
+landed, including rate-limit 429s and bot flagging. Prints PASS/FAIL per
+check, exits 1 on any failure. Its final step exhausts the per-IP rate
+limit, so wait ~60s before re-running.
 
 ### End-to-end (Playwright)
 
-Start a server with the test password first:
+Start a dev server with the test password first:
 
 ```sh
 NUXT_ADMIN_PASSWORD=test NUXT_SESSION_PASSWORD="$(openssl rand -hex 32)" npm run dev
@@ -229,21 +185,23 @@ npx playwright test -c tests
 
 Covers the public site (Role Center portlets render, record-to-record
 navigation, subtab switching, console-error-free, reduced motion), the
-analytics pipeline (a real browsed session asserted straight from SQLite,
-replay chunk included) and the `/ops` console (login gate, overview,
-session detail, replay player) on desktop and mobile viewports.
+analytics pipeline (a real browsed session asserted straight from the local
+D1 file, replay chunk included) and the `/ops` console (login gate,
+overview, session detail, replay player) on desktop and mobile viewports.
 Screenshots land in `test-results/screens/`. `BASE_URL`, `OPS_PASSWORD` and
-`DATA_DIR` env vars retarget the suite.
+`D1_DB_PATH` env vars retarget the suite.
 
-## SEG 11 // TROUBLESHOOTING
+## SEG 08 // TROUBLESHOOTING
 
-- `better-sqlite3` fails to load (ABI / invalid ELF errors): the native
-  binding was built for a different Node or libc. Rebuild in the environment
-  that runs it: `npm rebuild better-sqlite3`. In Docker this can't happen:
-  both image stages share the same base.
-- GEO OFFLINE in /ops: the GeoLite2 download hasn't finished or the box has
-  no outbound network. Analytics still works; geo columns stay null. Fix by
-  allowing the download or setting `NUXT_GEOIP_MMDB_PATH`.
+- **"Cloudflare bindings unavailable" in dev** — run
+  `npm run db:migrate:local` once, then start `npm run dev` from the repo
+  root (nitro-cloudflare-dev reads `wrangler.jsonc` for the bindings).
+- **`wrangler deploy` fails on database_id** — you haven't pasted the id
+  from `wrangler d1 create resume-analytics` into `wrangler.jsonc` yet.
+- **/ops returns 503 "admin disabled"** — `NUXT_ADMIN_PASSWORD` secret not
+  set on the deployed worker (`npx wrangler secret put NUXT_ADMIN_PASSWORD`).
+- **Geo columns are null locally** — expected: Cloudflare's request
+  metadata only exists at the real edge. Deployed traffic resolves fine.
 - **Reduced interactivity with JS blocked** — expected. The pages are
   server-rendered; records, lists and the dashboard render without
   JavaScript. You just lose the interactive bits — global search, menu
@@ -251,5 +209,3 @@ Screenshots land in `test-results/screens/`. `BASE_URL`, `OPS_PASSWORD` and
   analytics, which is rather the point).
 - **429s from /api/collect** — per-IP rate limit (60/min). Normal browsing
   never hits it; the seed script does so deliberately as its last step.
-- **Prod build exits immediately at boot** — read the error: missing
-  `NUXT_ADMIN_PASSWORD` or a `NUXT_SESSION_PASSWORD` shorter than 32 chars.

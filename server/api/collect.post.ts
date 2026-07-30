@@ -208,7 +208,7 @@ function parseEnvelope(body: unknown, now: number): { vid: string, sid: string, 
 }
 
 export default defineEventHandler(async (event) => {
-  const rawIp = getClientIp(event) // un-anonymized: rate limiting + geo
+  const rawIp = getClientIp(event) // un-anonymized: rate limiting (geo now comes from request.cf)
   if (!rateLimit('collect', rawIp, 60, 60_000)) {
     throw createError({ statusCode: 429, statusMessage: 'Too Many Requests' })
   }
@@ -233,63 +233,69 @@ export default defineEventHandler(async (event) => {
 
   const storeIp = getStorageIp(event)
   const ua = clampStr(getHeader(event, 'user-agent'), 400)
-  const bot = isBotUA(ua) || isHoneypotFlagged(storeIp)
+  const bot = isBotUA(ua) || (await isHoneypotFlagged(event, storeIp))
 
   try {
-    const db = getDb()
-    const sessionExists = db.prepare('SELECT sid FROM sessions WHERE sid = ?').get(sid) as { sid: string } | undefined
-    const visitorExists = db.prepare('SELECT vid FROM visitors WHERE vid = ?').get(vid) as { vid: string } | undefined
+    const db = getDb(event)
+    const sessionExists = await db.prepare('SELECT sid FROM sessions WHERE sid = ?').bind(sid).first<{ sid: string }>()
     const pv = parsed.pv
 
-    db.transaction(() => {
-      if (!visitorExists) {
-        db.prepare(
-          `INSERT INTO visitors (vid, first_seen_at, last_seen_at, visit_count, first_referrer, first_utm_source, first_utm_medium, first_utm_campaign)
-           VALUES (?, ?, ?, 1, ?, ?, ?, ?)`,
-        ).run(vid, now, now, pv?.referrer ?? null, pv?.utmSource ?? null, pv?.utmMedium ?? null, pv?.utmCampaign ?? null)
-      } else {
-        // previously-unseen sid on a known visitor = a new visit
-        db.prepare('UPDATE visitors SET last_seen_at = ?, visit_count = visit_count + ? WHERE vid = ?')
-          .run(now, sessionExists ? 0 : 1, vid)
-      }
+    // Upserts instead of read-then-branch: D1 has no interactive
+    // transactions, but a batch is atomic and excluded.* carries the
+    // increments, so concurrent envelopes can't lose updates.
+    const dev = parseUA(ua)
+    const geo = lookupGeo(event)
+    const startedAt = parsed.events.length > 0 ? Math.min(...parsed.events.map(e => e.t)) : now
 
-      if (!sessionExists) {
-        const dev = parseUA(ua)
-        const geo = lookupGeo(rawIp)
-        const startedAt = parsed.events.length > 0 ? Math.min(...parsed.events.map(e => e.t)) : now
-        db.prepare(
-          `INSERT INTO sessions (
-             sid, vid, started_at, last_seen_at, duration_ms, ip, ua,
-             browser, browser_ver, os, device_type,
-             screen_w, screen_h, viewport_w, viewport_h, dpr, lang, tz,
-             country, region, city, lat, lon,
-             referrer, utm_source, utm_medium, utm_campaign, utm_term, utm_content,
-             entry_path, pageviews, max_scroll_pct, is_bot, has_replay
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
-        ).run(
-          sid, vid, startedAt, now, parsed.heartbeats * HEARTBEAT_MS, storeIp, ua,
-          dev.browser, dev.browserVer, dev.os, dev.deviceType,
-          pv?.screenW ?? null, pv?.screenH ?? null, pv?.viewportW ?? null, pv?.viewportH ?? null,
-          pv?.dpr ?? null, pv?.lang ?? null, pv?.tz ?? null,
-          geo?.country ?? null, geo?.region ?? null, geo?.city ?? null, geo?.lat ?? null, geo?.lon ?? null,
-          pv?.referrer ?? null, pv?.utmSource ?? null, pv?.utmMedium ?? null,
-          pv?.utmCampaign ?? null, pv?.utmTerm ?? null, pv?.utmContent ?? null,
-          url, parsed.pageviews, parsed.maxScroll, bot ? 1 : 0,
-        )
-      } else {
-        db.prepare(
-          `UPDATE sessions SET
-             last_seen_at = ?,
-             pageviews = pageviews + ?,
-             max_scroll_pct = MAX(max_scroll_pct, ?),
-             duration_ms = duration_ms + ?
-           WHERE sid = ?`,
-        ).run(now, parsed.pageviews, parsed.maxScroll, parsed.heartbeats * HEARTBEAT_MS, sid)
-      }
+    const statements = [
+      db.prepare(
+        `INSERT INTO visitors (vid, first_seen_at, last_seen_at, visit_count, first_referrer, first_utm_source, first_utm_medium, first_utm_campaign)
+         VALUES (?, ?, ?, 1, ?, ?, ?, ?)
+         ON CONFLICT(vid) DO UPDATE SET
+           last_seen_at = excluded.last_seen_at,
+           visit_count = visitors.visit_count + ?`,
+      ).bind(
+        vid, now, now, pv?.referrer ?? null, pv?.utmSource ?? null, pv?.utmMedium ?? null, pv?.utmCampaign ?? null,
+        sessionExists ? 0 : 1, // previously-unseen sid on a known visitor = a new visit
+      ),
+      db.prepare(
+        `INSERT INTO sessions (
+           sid, vid, started_at, last_seen_at, duration_ms, ip, ua,
+           browser, browser_ver, os, device_type,
+           screen_w, screen_h, viewport_w, viewport_h, dpr, lang, tz,
+           country, region, city, lat, lon,
+           referrer, utm_source, utm_medium, utm_campaign, utm_term, utm_content,
+           entry_path, pageviews, max_scroll_pct, is_bot, has_replay
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+         ON CONFLICT(sid) DO UPDATE SET
+           last_seen_at = excluded.last_seen_at,
+           pageviews = sessions.pageviews + excluded.pageviews,
+           max_scroll_pct = MAX(sessions.max_scroll_pct, excluded.max_scroll_pct),
+           duration_ms = sessions.duration_ms + excluded.duration_ms`,
+      ).bind(
+        sid, vid, startedAt, now, parsed.heartbeats * HEARTBEAT_MS, storeIp, ua,
+        dev.browser, dev.browserVer, dev.os, dev.deviceType,
+        pv?.screenW ?? null, pv?.screenH ?? null, pv?.viewportW ?? null, pv?.viewportH ?? null,
+        pv?.dpr ?? null, pv?.lang ?? null, pv?.tz ?? null,
+        geo?.country ?? null, geo?.region ?? null, geo?.city ?? null, geo?.lat ?? null, geo?.lon ?? null,
+        pv?.referrer ?? null, pv?.utmSource ?? null, pv?.utmMedium ?? null,
+        pv?.utmCampaign ?? null, pv?.utmTerm ?? null, pv?.utmContent ?? null,
+        url, parsed.pageviews, parsed.maxScroll, bot ? 1 : 0,
+      ),
+    ]
 
-      const insertEvent = db.prepare('INSERT INTO events (sid, ts, type, name, payload) VALUES (?, ?, ?, ?, ?)')
-      for (const e of parsed.events) insertEvent.run(sid, e.t, e.type, e.name, e.payload)
-    })()
+    // Multi-row event inserts, 20 rows per statement (D1 caps a statement
+    // at 100 bound parameters; 20 × 5 = 100).
+    for (let i = 0; i < parsed.events.length; i += 20) {
+      const chunk = parsed.events.slice(i, i + 20)
+      statements.push(
+        db.prepare(
+          `INSERT INTO events (sid, ts, type, name, payload) VALUES ${chunk.map(() => '(?, ?, ?, ?, ?)').join(', ')}`,
+        ).bind(...chunk.flatMap(e => [sid, e.t, e.type, e.name, e.payload])),
+      )
+    }
+
+    await db.batch(statements)
   } catch (err) {
     console.error('[collect] persist failed:', err)
     throw createError({ statusCode: 500, statusMessage: 'Internal Server Error' })

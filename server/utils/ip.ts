@@ -32,10 +32,13 @@ function truncateIpv6(ip: string): string {
 
 /**
  * Real client IP (un-anonymized) — use this for rate limiting and geo lookup.
- * When trustProxy is on, prefers x-real-ip, then the first x-forwarded-for
- * entry, then the socket address.
+ * On Cloudflare, cf-connecting-ip is set by the edge and unspoofable. The
+ * x-real-ip / x-forwarded-for fallbacks cover non-Cloudflare setups; the
+ * socket address (absent on Workers) is the last resort.
  */
 export function getClientIp(event: H3Event): string {
+  const cf = getHeader(event, 'cf-connecting-ip')
+  if (cf && cf.trim()) return normalizeIp(cf)
   const cfg = useRuntimeConfig(event)
   if (cfg.trustProxy) {
     const real = getHeader(event, 'x-real-ip')
@@ -46,7 +49,7 @@ export function getClientIp(event: H3Event): string {
       if (first) return normalizeIp(first)
     }
   }
-  return normalizeIp(event.node.req.socket.remoteAddress ?? '')
+  return normalizeIp(event.node?.req?.socket?.remoteAddress ?? '')
 }
 
 /** Zero the last IPv4 octet / truncate IPv6 to /48. Pure — always anonymizes. */

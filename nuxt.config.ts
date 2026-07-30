@@ -7,7 +7,10 @@ export default defineNuxtConfig({
   components: [{ path: '~/components', pathPrefix: false }],
 
   nitro: {
-    preset: 'node-server',
+    // Cloudflare Workers (static assets + D1 + R2), deployed with wrangler.
+    preset: 'cloudflare_module',
+    // Provides the wrangler.jsonc bindings (DB, REPLAYS) inside `nuxt dev`.
+    modules: ['nitro-cloudflare-dev'],
   },
 
   css: [
@@ -56,15 +59,15 @@ export default defineNuxtConfig({
   },
 
   runtimeConfig: {
-    // Override via NUXT_* env vars (see .env.example)
+    // Secrets come in as NUXT_* env vars — on Cloudflare set them with
+    // `wrangler secret put NUXT_ADMIN_PASSWORD` / `NUXT_SESSION_PASSWORD`;
+    // the rest are plain vars in wrangler.jsonc.
     adminPassword: '',
     sessionPassword: '',
-    dataDir: './data',
     trustProxy: true,
     replayRetentionDays: 30,
     eventRetentionDays: 180,
     ipAnonymize: false,
-    geoipMmdbPath: '',
     public: {
       replaySampleRate: 1,
     },

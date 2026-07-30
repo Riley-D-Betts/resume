@@ -14,18 +14,17 @@ export default defineEventHandler(async (event) => {
   await requireAdmin(event)
 
   const sid = getRouterParam(event, 'id') ?? ''
-  const db = getDb()
+  const db = getDb(event)
 
-  const session = db.prepare('SELECT * FROM sessions WHERE sid = ?').get(sid) as
-    | Record<string, unknown>
-    | undefined
+  const session = await db.prepare('SELECT * FROM sessions WHERE sid = ?').bind(sid).first<Record<string, unknown>>()
   if (!session) {
     throw createError({ statusCode: 404, statusMessage: 'unknown session' })
   }
 
-  const rows = db
+  const { results: rows } = await db
     .prepare('SELECT ts, type, name, payload FROM events WHERE sid = ? ORDER BY ts LIMIT 2000')
-    .all(sid) as { ts: number; type: string; name: string | null; payload: string | null }[]
+    .bind(sid)
+    .all<{ ts: number, type: string, name: string | null, payload: string | null }>()
 
   const events = rows.map(r => ({
     ts: r.ts,

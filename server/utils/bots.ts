@@ -1,3 +1,4 @@
+import type { H3Event } from 'h3'
 import { getDb } from './db'
 
 const BOT_RE
@@ -10,40 +11,38 @@ export function isBotUA(ua: string | null | undefined): boolean {
 
 const HONEYPOT_TTL_MS = 24 * 60 * 60 * 1000
 
-// ip → expiresAt (epoch ms). In-memory on purpose: single-process deployment,
-// and a honeypot flag that dies with the process is acceptable.
-const flagged = new Map<string, number>()
-
-function sweep(now: number): void {
-  for (const [ip, expires] of flagged) {
-    if (expires <= now) flagged.delete(ip)
-  }
-}
-
 /**
- * Mark an IP as a honeypot visitor for 24h and retro-flag its recent sessions.
- * Pass the STORAGE form of the IP (getStorageIp) so the sessions.ip match works.
+ * Mark an IP as a honeypot visitor for 24h and retro-flag its recent
+ * sessions. Flags live in D1 (Workers isolates are many and short-lived,
+ * so process memory can't hold them). Pass the STORAGE form of the IP
+ * (getStorageIp) so the sessions.ip match works.
  */
-export function flagHoneypot(ip: string): void {
+export async function flagHoneypot(event: H3Event, ip: string): Promise<void> {
   if (!ip) return
   const now = Date.now()
-  flagged.set(ip, now + HONEYPOT_TTL_MS)
   try {
-    getDb()
-      .prepare('UPDATE sessions SET is_bot = 1 WHERE ip = ? AND started_at >= ?')
-      .run(ip, now - HONEYPOT_TTL_MS)
+    const db = getDb(event)
+    await db.batch([
+      db.prepare(
+        'INSERT INTO honeypot_ips (ip, expires_at) VALUES (?, ?) ON CONFLICT(ip) DO UPDATE SET expires_at = excluded.expires_at',
+      ).bind(ip, now + HONEYPOT_TTL_MS),
+      db.prepare('UPDATE sessions SET is_bot = 1 WHERE ip = ? AND started_at >= ?').bind(ip, now - HONEYPOT_TTL_MS),
+      db.prepare('DELETE FROM honeypot_ips WHERE expires_at <= ?').bind(now),
+    ])
   } catch (err) {
-    console.error('[bots] honeypot session flag failed:', err)
+    console.error('[bots] honeypot flag failed:', err)
   }
-  sweep(now)
 }
 
-export function isHoneypotFlagged(ip: string): boolean {
-  const expires = flagged.get(ip)
-  if (expires === undefined) return false
-  if (expires <= Date.now()) {
-    flagged.delete(ip)
+export async function isHoneypotFlagged(event: H3Event, ip: string): Promise<boolean> {
+  if (!ip) return false
+  try {
+    const row = await getDb(event)
+      .prepare('SELECT ip FROM honeypot_ips WHERE ip = ? AND expires_at > ?')
+      .bind(ip, Date.now())
+      .first()
+    return row !== null
+  } catch {
     return false
   }
-  return true
 }

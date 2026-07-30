@@ -1,19 +1,31 @@
+import { existsSync, readdirSync, statSync } from 'node:fs'
 import path from 'node:path'
-import Database from 'better-sqlite3'
+import { DatabaseSync } from 'node:sqlite'
 import { expect, test } from '@playwright/test'
 
 /**
  * End-to-end analytics: drive a real browse session through the page, then
- * assert the pipeline landed it in SQLite — session row, section events,
- * scroll depth and (eventually) an rrweb replay chunk.
+ * assert the pipeline landed it in the local D1 database — session row,
+ * section events, scroll depth and (eventually) an rrweb replay chunk.
  *
- * Desktop only, and requires the server to write into DATA_DIR (default
- * ./data) relative to the playwright cwd — run from the repo root against
- * a locally running server.
+ * Desktop only. The dev server keeps its D1 state under .wrangler/state
+ * relative to the playwright cwd — run from the repo root against a locally
+ * running server (`npm run db:migrate:local` once, then `npm run dev`).
+ * D1_DB_PATH overrides the discovered SQLite path.
  */
 
 const SECTIONS = ['sys', 'profile', 'opslog', 'fobech', 'bays', 'comms'] as const
-const DB_PATH = path.join(path.resolve(process.env.DATA_DIR || './data'), 'analytics.db')
+
+/** Newest .sqlite under miniflare's local D1 state — the dev database. */
+function findLocalD1(): string | undefined {
+  if (process.env.D1_DB_PATH) return path.resolve(process.env.D1_DB_PATH)
+  const dir = path.resolve('.wrangler/state/v3/d1/miniflare-D1DatabaseObject')
+  if (!existsSync(dir)) return undefined
+  const files = readdirSync(dir).filter(f => f.endsWith('.sqlite'))
+  if (files.length === 0) return undefined
+  files.sort((a, b) => statSync(path.join(dir, b)).mtimeMs - statSync(path.join(dir, a)).mtimeMs)
+  return path.join(dir, files[0]!)
+}
 
 interface SessionRow {
   sid: string
@@ -27,18 +39,22 @@ interface CountRow {
 }
 
 /**
- * Poll the SQLite file until `query` returns a value or the deadline hits.
- * A fresh readonly connection per attempt keeps WAL reads current and never
- * blocks the server's writer.
+ * Poll the local D1 SQLite file until `query` returns a value or the
+ * deadline hits. A fresh readonly connection per attempt keeps WAL reads
+ * current and never blocks the server's writer; the path is re-resolved
+ * per attempt because miniflare creates it lazily.
  */
-async function pollDb<T>(timeoutMs: number, query: (db: Database.Database) => T | undefined): Promise<T | undefined> {
+async function pollDb<T>(timeoutMs: number, query: (db: DatabaseSync) => T | undefined): Promise<T | undefined> {
   const deadline = Date.now() + timeoutMs
   for (;;) {
-    let db: Database.Database | undefined
+    let db: DatabaseSync | undefined
     try {
-      db = new Database(DB_PATH, { readonly: true, fileMustExist: true })
-      const out = query(db)
-      if (out !== undefined) return out
+      const dbPath = findLocalD1()
+      if (dbPath) {
+        db = new DatabaseSync(dbPath, { readOnly: true })
+        const out = query(db)
+        if (out !== undefined) return out
+      }
     } catch {
       // db file not created yet — keep polling
     } finally {
@@ -49,8 +65,8 @@ async function pollDb<T>(timeoutMs: number, query: (db: Database.Database) => T 
   }
 }
 
-function countEvents(db: Database.Database, sid: string, type: string): number {
-  const row = db.prepare('SELECT COUNT(*) AS n FROM events WHERE sid = ? AND type = ?').get(sid, type) as CountRow
+function countEvents(db: DatabaseSync, sid: string, type: string): number {
+  const row = db.prepare('SELECT COUNT(*) AS n FROM events WHERE sid = ? AND type = ?').get(sid, type) as unknown as CountRow
   return row.n
 }
 
@@ -97,7 +113,7 @@ test('a real browse session lands in SQLite with events and a replay chunk', asy
   // -- session row ------------------------------------------------------
   const session = await pollDb(15_000, (db) => {
     const row = db.prepare('SELECT sid, started_at, pageviews, max_scroll_pct FROM sessions WHERE sid = ?')
-      .get(sid) as SessionRow | undefined
+      .get(sid) as unknown as SessionRow | undefined
     return row && row.pageviews >= 1 ? row : undefined
   })
   expect(session, 'sessions row with pageviews >= 1 for this sid').toBeTruthy()
@@ -114,6 +130,6 @@ test('a real browse session lands in SQLite with events and a replay chunk', asy
   // -- replay chunk -----------------------------------------------------
   // The page is still open (rrweb keeps recording/uploading); poll up to 30s.
   const chunk = await pollDb(30_000, db =>
-    db.prepare('SELECT seq FROM replay_chunks WHERE sid = ? LIMIT 1').get(sid) as { seq: number } | undefined)
+    db.prepare('SELECT seq FROM replay_chunks WHERE sid = ? LIMIT 1').get(sid) as unknown as { seq: number } | undefined)
   expect(chunk, 'at least one replay chunk stored for this session').toBeTruthy()
 })

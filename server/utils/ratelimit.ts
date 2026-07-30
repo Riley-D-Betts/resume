@@ -1,8 +1,9 @@
 /**
  * Sliding-window rate limiter, in-memory Map.
- * Single-process assumption: this deployment runs one Nitro node-server
- * process, so no shared store (Redis etc.) is needed. Counters reset on
- * restart, which is fine for abuse throttling.
+ * On Cloudflare Workers the counters are per-isolate, so the effective
+ * limit is (limit × concurrent isolates) — looser than single-process but
+ * still plenty to blunt abuse, and it costs no D1 reads on the hot path.
+ * Counters reset when an isolate is recycled, which is fine for throttling.
  */
 
 interface Window {

@@ -15,7 +15,7 @@ import { defineConfig, devices } from '@playwright/test'
  * Environment knobs:
  * - BASE_URL      target server (default http://localhost:3000)
  * - OPS_PASSWORD  /ops password the ops spec logs in with (default 'test')
- * - DATA_DIR      where analytics.db lives (default ./data) — analytics spec
+ * - D1_DB_PATH    local D1 sqlite file (default: discovered under .wrangler/state) — analytics spec
  * - PW_EXEC       when set, force the preinstalled chromium binary at
  *                 /opt/pw-browsers/chromium instead of letting Playwright
  *                 resolve a browser from PLAYWRIGHT_BROWSERS_PATH. Useful

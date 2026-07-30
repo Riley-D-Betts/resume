@@ -1,7 +1,10 @@
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
-import { gunzipSync } from 'node:zlib'
 import { requireAdmin } from '../../../utils/auth'
+
+/** Gunzip an R2 object body via the web-standard DecompressionStream. */
+async function gunzipText(buf: ArrayBuffer): Promise<string> {
+  const stream = new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))
+  return await new Response(stream).text()
+}
 
 /**
  * GET /api/ops/replay/:id — stitch every stored rrweb chunk for the session
@@ -15,21 +18,25 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'bad session id' })
   }
 
-  const chunks = getDb()
+  const db = getDb(event)
+  const bucket = getReplayBucket(event)
+  const { results: chunks } = await db
     .prepare('SELECT seq, compressed FROM replay_chunks WHERE sid = ? ORDER BY seq')
-    .all(sid) as { seq: number; compressed: number }[]
+    .bind(sid)
+    .all<{ seq: number, compressed: number }>()
   if (chunks.length === 0) {
     throw createError({ statusCode: 404, statusMessage: 'no replay' })
   }
 
-  const dir = join(getDataDir(), 'replays', sid)
   const combined: unknown[] = []
   for (const chunk of chunks) {
     const ext = chunk.compressed ? '.json.gz' : '.json'
-    const file = join(dir, `${String(chunk.seq).padStart(5, '0')}${ext}`)
+    const key = `replays/${sid}/${String(chunk.seq).padStart(5, '0')}${ext}`
     try {
-      const raw = readFileSync(file)
-      const text = chunk.compressed ? gunzipSync(raw).toString('utf8') : raw.toString('utf8')
+      const obj = await bucket.get(key)
+      if (!obj) continue
+      const raw = await obj.arrayBuffer()
+      const text = chunk.compressed ? await gunzipText(raw) : new TextDecoder().decode(raw)
       const events = JSON.parse(text) as unknown
       if (Array.isArray(events)) combined.push(...events)
     } catch {

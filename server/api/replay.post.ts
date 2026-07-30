@@ -1,8 +1,5 @@
-import { mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
-
-// Strict header validation doubles as path-traversal defense: sid becomes a
-// directory name and only ever contains hex digits and dashes.
+// Strict header validation doubles as key-injection defense: sid becomes
+// part of an R2 object key and only ever contains hex digits and dashes.
 const SID_RE = /^[0-9a-fA-F-]{16,64}$/
 const SEQ_RE = /^\d{1,4}$/ // 0..9999
 const MAX_CHUNK_BYTES = 2 * 1024 * 1024
@@ -29,33 +26,31 @@ export default defineEventHandler(async (event) => {
   if (body.length > MAX_CHUNK_BYTES) throw createError({ statusCode: 413, statusMessage: 'Payload Too Large' })
 
   try {
-    const db = getDb()
+    const db = getDb(event)
+    const bucket = getReplayBucket(event)
 
     // Cumulative per-session cap (excluding a chunk this seq would replace).
-    const { total } = db
+    const { total } = (await db
       .prepare('SELECT COALESCE(SUM(bytes), 0) AS total FROM replay_chunks WHERE sid = ? AND seq <> ?')
-      .get(sid, seq) as { total: number }
+      .bind(sid, seq)
+      .first<{ total: number }>())!
     if (total + body.length > MAX_SESSION_BYTES) {
       throw createError({ statusCode: 413, statusMessage: 'Payload Too Large' })
     }
 
-    const dir = join(getDataDir(), 'replays', sid)
-    mkdirSync(dir, { recursive: true })
-    const base = String(seq).padStart(5, '0')
-    writeFileSync(join(dir, `${base}${gz ? '.json.gz' : '.json'}`), body)
-    try {
-      // A re-sent seq may have flipped compression — drop the stale twin.
-      unlinkSync(join(dir, `${base}${gz ? '.json' : '.json.gz'}`))
-    } catch {
-      // no twin — normal case
-    }
+    const base = `replays/${sid}/${String(seq).padStart(5, '0')}`
+    await bucket.put(`${base}${gz ? '.json.gz' : '.json'}`, body)
+    // A re-sent seq may have flipped compression — drop the stale twin.
+    await bucket.delete(`${base}${gz ? '.json' : '.json.gz'}`)
 
-    db.prepare(
-      'INSERT OR REPLACE INTO replay_chunks (sid, seq, bytes, compressed, created_at) VALUES (?, ?, ?, ?, ?)',
-    ).run(sid, seq, body.length, gz ? 1 : 0, Date.now())
-    // The sid may have no sessions row yet (replay beat /api/collect) — the
-    // UPDATE is then a no-op and the chunk is still accepted.
-    db.prepare('UPDATE sessions SET has_replay = 1 WHERE sid = ?').run(sid)
+    await db.batch([
+      db.prepare(
+        'INSERT OR REPLACE INTO replay_chunks (sid, seq, bytes, compressed, created_at) VALUES (?, ?, ?, ?, ?)',
+      ).bind(sid, seq, body.length, gz ? 1 : 0, Date.now()),
+      // The sid may have no sessions row yet (replay beat /api/collect) — the
+      // UPDATE is then a no-op and the chunk is still accepted.
+      db.prepare('UPDATE sessions SET has_replay = 1 WHERE sid = ?').bind(sid),
+    ])
   } catch (err) {
     if (err && typeof err === 'object' && 'statusCode' in err) throw err
     console.error('[replay] store failed:', err)

@@ -14,7 +14,7 @@ function rangeStart(range: unknown): number {
   return Date.now() - ms
 }
 
-/** 'YYYY-MM-DD' in server-local time (matches SQLite 'localtime'). */
+/** 'YYYY-MM-DD' in worker-local time (UTC on Cloudflare, matching SQLite 'localtime'). */
 function localDay(t: number): string {
   const d = new Date(t)
   const mm = String(d.getMonth() + 1).padStart(2, '0')
@@ -33,80 +33,73 @@ export default defineEventHandler(async (event) => {
   const start = rangeStart(q.range)
   const bot = q.bots === '1' ? '' : 'AND is_bot = 0'
   const botJoin = q.bots === '1' ? '' : 'AND s.is_bot = 0'
-  const db = getDb()
+  const db = getDb(event)
   const now = Date.now()
 
-  const visitsToday = (
-    db
-      .prepare(`SELECT COUNT(*) AS n FROM sessions WHERE started_at >= ? ${bot}`)
-      .get(new Date(now).setHours(0, 0, 0, 0)) as { n: number }
-  ).n
-
-  const activeNow = (
-    db
-      .prepare(`SELECT COUNT(*) AS n FROM sessions WHERE last_seen_at > ? ${bot}`)
-      .get(now - 60_000) as { n: number }
-  ).n
-
-  const uniques = (
-    db
-      .prepare(`SELECT COUNT(DISTINCT vid) AS n FROM sessions WHERE started_at >= ? ${bot}`)
-      .get(start) as { n: number }
-  ).n
-
-  const avgActiveMs = (
-    db
-      .prepare(
-        `SELECT CAST(COALESCE(ROUND(AVG(duration_ms)), 0) AS INTEGER) AS n
-         FROM sessions WHERE started_at >= ? ${bot}`,
-      )
-      .get(start) as { n: number }
-  ).n
-
-  const replay = db
-    .prepare(
+  const [visitsRow, activeRow, uniquesRow, avgRow, replay, dayRes, outboundRes, recentRes] = await Promise.all([
+    db.prepare(`SELECT COUNT(*) AS n FROM sessions WHERE started_at >= ? ${bot}`)
+      .bind(new Date(now).setHours(0, 0, 0, 0))
+      .first<{ n: number }>(),
+    db.prepare(`SELECT COUNT(*) AS n FROM sessions WHERE last_seen_at > ? ${bot}`)
+      .bind(now - 60_000)
+      .first<{ n: number }>(),
+    db.prepare(`SELECT COUNT(DISTINCT vid) AS n FROM sessions WHERE started_at >= ? ${bot}`)
+      .bind(start)
+      .first<{ n: number }>(),
+    db.prepare(
+      `SELECT CAST(COALESCE(ROUND(AVG(duration_ms)), 0) AS INTEGER) AS n
+       FROM sessions WHERE started_at >= ? ${bot}`,
+    )
+      .bind(start)
+      .first<{ n: number }>(),
+    db.prepare(
       `SELECT COUNT(DISTINCT sid) AS count, CAST(COALESCE(SUM(bytes), 0) AS INTEGER) AS bytes
        FROM replay_chunks`,
-    )
-    .get() as { count: number; bytes: number }
-
-  // -- sessions per local day, last 30 days, gaps filled with 0 ----------
-  const dayRows = db
-    .prepare(
+    ).first<{ count: number, bytes: number }>(),
+    db.prepare(
       `SELECT date(started_at / 1000, 'unixepoch', 'localtime') AS day, COUNT(*) AS n
        FROM sessions WHERE started_at >= ? ${bot} GROUP BY day`,
     )
-    .all(now - 30 * DAY_MS) as { day: string; n: number }[]
-  const byDay = new Map(dayRows.map(r => [r.day, r.n]))
-  const series = Array.from({ length: 30 }, (_, i) => {
-    const day = localDay(now - (29 - i) * DAY_MS)
-    return { day, n: byDay.get(day) ?? 0 }
-  })
-
-  const topOutbound = db
-    .prepare(
+      .bind(now - 30 * DAY_MS)
+      .all<{ day: string, n: number }>(),
+    db.prepare(
       `SELECT COALESCE(e.name, '(unknown)') AS name, COUNT(*) AS n
        FROM events e JOIN sessions s ON s.sid = e.sid
        WHERE e.type = 'outbound' AND e.ts >= ? ${botJoin}
        GROUP BY e.name ORDER BY n DESC LIMIT 10`,
     )
-    .all(start) as { name: string; n: number }[]
-
-  const recent = db
-    .prepare(
+      .bind(start)
+      .all<{ name: string, n: number }>(),
+    db.prepare(
       `SELECT sid, started_at, country, city, device_type, browser, duration_ms, has_replay
        FROM sessions WHERE 1 = 1 ${bot} ORDER BY started_at DESC LIMIT 8`,
-    )
-    .all() as {
-    sid: string
-    started_at: number
-    country: string | null
-    city: string | null
-    device_type: string | null
-    browser: string | null
-    duration_ms: number
-    has_replay: number
-  }[]
+    ).all<{
+      sid: string
+      started_at: number
+      country: string | null
+      city: string | null
+      device_type: string | null
+      browser: string | null
+      duration_ms: number
+      has_replay: number
+    }>(),
+  ])
 
-  return { visitsToday, activeNow, uniques, avgActiveMs, replay, series, topOutbound, recent }
+  // -- sessions per local day, last 30 days, gaps filled with 0 ----------
+  const byDay = new Map(dayRes.results.map(r => [r.day, r.n]))
+  const series = Array.from({ length: 30 }, (_, i) => {
+    const day = localDay(now - (29 - i) * DAY_MS)
+    return { day, n: byDay.get(day) ?? 0 }
+  })
+
+  return {
+    visitsToday: visitsRow!.n,
+    activeNow: activeRow!.n,
+    uniques: uniquesRow!.n,
+    avgActiveMs: avgRow!.n,
+    replay: replay!,
+    series,
+    topOutbound: outboundRes.results,
+    recent: recentRes.results,
+  }
 })
