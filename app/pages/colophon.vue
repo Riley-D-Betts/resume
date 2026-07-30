@@ -9,9 +9,9 @@ const stack = {
     { label: 'Script Type', value: 'Suitelet (allegedly)' },
     { label: 'Framework', value: 'Nuxt 4 · Vue 3 · SSR' },
     { label: 'Language', value: 'TypeScript (strict)' },
-    { label: 'Runtime', value: 'Node · Nitro · single process' },
-    { label: 'Data Store', value: 'SQLite (WAL) — one file' },
-    { label: 'Deployment', value: 'Self-hosted · Docker' },
+    { label: 'Runtime', value: 'Cloudflare Workers · Nitro' },
+    { label: 'Data Store', value: 'D1 (SQLite) · R2' },
+    { label: 'Deployment', value: 'Cloudflare · free tier' },
     { label: 'Owner', value: 'Riley Betts', href: '/employee' },
     { label: 'Status', value: 'Released', tone: 'green' as const },
   ],
@@ -19,7 +19,7 @@ const stack = {
 
 const notes = [
   'Every visible word comes from one typed file — app/data/resume.ts. Components render from it and nothing hardcodes copy, so the résumé is edited in one place.',
-  'The Bettsuite costume is a hand-written stylesheet scoped under a single body class. Behind a password at /ops sits a completely different dark console — first-party analytics with session replay, no third-party trackers, all of it on the same box that serves this page.',
+  'The Bettsuite costume is a hand-written stylesheet scoped under a single body class. Behind a password at /ops sits a completely different dark console — first-party analytics with session replay, no third-party trackers, all of it in the same Cloudflare account that serves this page.',
   'No UI kit, no component library, no template. The masthead, the menu bar, the field groups and the subtabs are all hand-rolled CSS, built against Bettsuite’s own published design tokens rather than from memory. Any resemblance to enterprise software you have suffered through is entirely intentional.',
 ]
 
@@ -28,7 +28,7 @@ const sublist = [
   { file: 'app/assets/css/bettsuite.css', role: 'The costume — tokens, chrome, records, lists' },
   { file: 'app/components/ns/*.vue', role: 'Masthead, menu bar, portlets, subtabs, tables' },
   { file: 'app/pages/**', role: 'Dashboard, records, lists, this page' },
-  { file: 'server/**', role: 'Analytics intake, /ops API, SQLite access' },
+  { file: 'server/**', role: 'Analytics intake, /ops API, D1 / R2 access' },
 ]
 </script>
 

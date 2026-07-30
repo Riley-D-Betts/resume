@@ -260,7 +260,7 @@ export const resume: ResumeContent = {
 
   identity: {
     name: 'Riley Betts',
-    email: 'rbetts@idamilk.com',
+    email: 'riley.betts@outlook.com',
     github: 'Riley-D-Betts',
     githubUrl: 'https://github.com/Riley-D-Betts',
     location: 'Burley, Idaho',
@@ -404,7 +404,7 @@ export const resume: ResumeContent = {
       label: 'Support',
       items: [
         { label: 'New Message', to: '/contact' },
-        { label: 'Email rbetts@idamilk.com', href: 'mailto:rbetts@idamilk.com' },
+        { label: 'Email riley.betts@outlook.com', href: 'mailto:riley.betts@outlook.com' },
         { label: 'GitHub', href: 'https://github.com/Riley-D-Betts' },
         { label: 'Fobech Studio', href: 'https://fobech.com' },
       ],
@@ -826,7 +826,7 @@ export const resume: ResumeContent = {
   contact: {
     intro:
       'Open a channel. This form composes an email — nothing is sent until your mail client opens, and nothing is stored on the way.',
-    email: 'rbetts@idamilk.com',
+    email: 'riley.betts@outlook.com',
     github: '@Riley-D-Betts',
     githubUrl: 'https://github.com/Riley-D-Betts',
     fobech: 'fobech.com',
@@ -838,7 +838,7 @@ export const resume: ResumeContent = {
     ],
     footer: '© 2026 Riley Betts · Built with Nuxt · A résumé wearing a Bettsuite costume · No templates harmed',
     privacyNotice:
-      'This site runs self-hosted, first-party analytics, including sampled session replay. No third parties. Data stays on my server.',
+      'This site runs first-party analytics, including sampled session replay. No third parties. Data stays in my own Cloudflare account.',
   },
 
   eggs: {

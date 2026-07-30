@@ -7,7 +7,7 @@ const emp = resume.employee
 const toast = useToast()
 
 const actions = [
-  { label: 'Send Email', href: 'mailto:rbetts@idamilk.com' },
+  { label: 'Send Email', href: `mailto:${resume.identity.email}` },
   { label: 'Open Subsidiary: Fobech', to: '/fobech' },
   { label: 'View Employment History', to: '/positions' },
   { label: 'Make Copy', toast: 'There is only one of him.' },
@@ -17,9 +17,10 @@ const actions = [
 // actor is the system or Riley himself, never an invented colleague
 const systemNotes = [
   { date: '11/18/2024', field: 'Employee', change: 'created → Active', by: 'System' },
-  { date: '11/18/2024', field: 'Job Title', change: '— → IT Supervisor', by: 'System' },
-  { date: '2025', field: 'Job Title', change: 'IT Supervisor → Information Technology Manager', by: 'System' },
-  { date: '2025', field: 'Role', change: 'User → Administrator', by: 'System' },
+  { date: '11/18/2024', field: 'Job Title', change: '— → Systems Analyst', by: 'System' },
+  { date: 'Nov 2025', field: 'Job Title', change: 'Systems Analyst → IT Supervisor', by: 'System' },
+  { date: '2026', field: 'Job Title', change: 'IT Supervisor → Information Technology Manager', by: 'System' },
+  { date: '2026', field: 'Role', change: 'User → Administrator', by: 'System' },
   { date: '2026', field: 'Subsidiary', change: 'added → Fobech (Founder)', by: resume.identity.name },
 ]
 
