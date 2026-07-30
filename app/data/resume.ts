@@ -505,7 +505,7 @@ export const resume: ResumeContent = {
         { label: '2022', value: 3, note: 'Business systems administrator — the server room' },
         { label: '2023', value: 4, note: 'MSP systems administrator — many networks' },
         { label: '2024', value: 5, note: 'Systems Analyst — intro to manufacturing' },
-        { label: '2025', value: 6, note: 'IT Supervisor — solo opperation' },
+        { label: '2025', value: 6, note: 'IT Supervisor — solo operation' },
         { label: '2026', value: 7, note: 'IT Manager — founded the department' },
         { label: '2026', value: 8, note: 'Founder — Fobech systems studio' },
       ],
@@ -641,7 +641,7 @@ export const resume: ResumeContent = {
       summary:
         'Sole IT operator for a high-volume dairy / UHT beverage plant, then founder of its IT department. Everything from the ERP core to the cable tray.',
       milestones: [
-        { note: 'Inducted as Systems analyst — sole IT operator for the plant', type: 'Hired' },
+        { note: 'Inducted as Systems Analyst — sole IT operator for the plant', type: 'Hired' },
         { note: 'Held network uptime above 99.98% across plant operations', type: 'Note' },
         { note: 'Built the majority of company systems personally or under direction', type: 'Note' },
         { note: 'Authored policy and procedure for previously undocumented processes', type: 'Note' },
@@ -660,7 +660,7 @@ export const resume: ResumeContent = {
       subtitle: 'The MSP years',
       location: 'Idaho Falls, Idaho',
       start: '2023-11-01',
-      end: '2024-9-01',
+      end: '2024-09-01',
       periodLabel: '2023 — 2024',
       titles: [{ title: 'Systems Administrator', period: 'Many networks, one sysadmin' }],
       status: 'Closed',
@@ -680,7 +680,7 @@ export const resume: ResumeContent = {
       location: 'Chubbuck / Pocatello, Idaho',
       start: '2021-07-01',
       end: '2023-11-01',
-      periodLabel: '2016 — 2019',
+      periodLabel: '2021 — 2023',
       titles: [
         { title: 'Solar Appointment Setter', period: 'The phones' },
         { title: 'Permit / System Designer', period: 'The drafting table' },
