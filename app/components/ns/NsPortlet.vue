@@ -61,6 +61,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDoc))
         {{ title }}
       </span>
       <div class="ns-portlet__tools">
+        <slot name="tools" />
         <button
           v-if="refreshable"
           type="button"

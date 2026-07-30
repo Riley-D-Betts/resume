@@ -49,7 +49,7 @@ const actions = [
     <div class="ns-secbar">Description</div>
     <div class="ns-fieldgroup">
       <div class="ns-prose">
-        <p>{{ p.blurb }}</p>
+        <p><NsLinkifyFobech :text="p.blurb" /></p>
       </div>
     </div>
 

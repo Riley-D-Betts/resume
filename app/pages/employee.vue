@@ -91,7 +91,7 @@ const readOnly = () => toast.show('This record is read-only — you have look-bu
       <!-- Communication -->
       <div v-show="active === 2" class="ns-subpanel">
         <div class="ns-prose">
-          <p v-for="(para, i) in emp.bio" :key="i">{{ para }}</p>
+          <p v-for="(para, i) in emp.bio" :key="i"><NsLinkifyFobech :text="para" /></p>
         </div>
       </div>
 

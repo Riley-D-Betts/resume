@@ -193,6 +193,8 @@ export interface ResumeContent {
     kpis: Kpi[]
     meter: { label: string; value: string; percent: number; min: number; max: number; target: string }
     trend: { title: string; unit: string; points: TrendPoint[] }
+    /** live iframe of the Fobech demo, embedded as a portlet */
+    demo: { title: string; url: string; note: string; cta: string }
     reminders: Reminder[]
     recent: RecentRecord[]
     shortcuts: Shortcut[]
@@ -509,6 +511,12 @@ export const resume: ResumeContent = {
         { label: '2026', value: 7, note: 'IT Manager — founded the department' },
         { label: '2026', value: 8, note: 'Founder — Fobech systems studio' },
       ],
+    },
+    demo: {
+      title: 'Fobech — Live Demo',
+      url: 'https://demo.fobech.com',
+      note: 'This is the actual Fobech demo environment, embedded live from demo.fobech.com.',
+      cta: 'Open the demo in a new tab',
     },
     reminders: [
       { count: '1', label: 'Employee record to review', tone: 'info', to: '/employee' },

@@ -108,6 +108,28 @@ const locked = () => toast.show('This dashboard is Locked — content and layout
           </template>
         </NsPortlet>
 
+        <NsPortlet :title="d.demo.title" flush>
+          <template #tools>
+            <a
+              class="ns-portlet__tool"
+              :href="d.demo.url"
+              target="_blank"
+              rel="noopener"
+              title="Open demo in new tab"
+              aria-label="Open demo in new tab"
+            >↗</a>
+          </template>
+          <div class="ns-demoframe">
+            <iframe :src="d.demo.url" :title="d.demo.title" loading="lazy" />
+          </div>
+          <template #foot>
+            <div class="ns-demoframe__foot">
+              <a :href="d.demo.url" target="_blank" rel="noopener">{{ d.demo.cta }} ↗</a>
+              <span class="ns-demoframe__note">{{ d.demo.note }}</span>
+            </div>
+          </template>
+        </NsPortlet>
+
         <NsPortlet title="Trend Graph">
           <NsTrend :title="d.trend.title" :unit="d.trend.unit" :points="d.trend.points" />
           <template #foot>

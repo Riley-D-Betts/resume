@@ -50,7 +50,7 @@ const actions = [
     <div class="ns-secbar">Summary</div>
     <div class="ns-fieldgroup">
       <div class="ns-prose">
-        <p>{{ p.summary }}</p>
+        <p><NsLinkifyFobech :text="p.summary" /></p>
       </div>
     </div>
 
@@ -59,7 +59,7 @@ const actions = [
           <ul class="ns-milestones">
             <li v-for="(m, i) in p.milestones" :key="i" class="ns-milestone">
               <span class="ns-milestone__stamp">{{ m.type }}</span>
-              <span class="ns-milestone__note">{{ m.note }}</span>
+              <span class="ns-milestone__note"><NsLinkifyFobech :text="m.note" /></span>
             </li>
           </ul>
         </div>

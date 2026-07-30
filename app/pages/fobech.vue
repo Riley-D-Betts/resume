@@ -58,7 +58,7 @@ const actions = [
           />
           <div class="ns-prose">
             <p><b>{{ f.taglines[0] }}</b> {{ f.taglines[1] }}</p>
-            <p>{{ f.blurb }}</p>
+            <p><NsLinkifyFobech :text="f.blurb" /></p>
           </div>
         </div>
 
