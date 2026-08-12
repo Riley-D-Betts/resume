@@ -112,6 +112,11 @@ Plain vars (edit in `wrangler.jsonc` → `vars`):
 
 ## SEG 05 // THE ANALYTICS
 
+This section is the summary; the full architecture — data flow, event
+taxonomy, D1 schema, replay chunk lifecycle, bot defenses, and the
+Workers constraints that shaped the design — is documented in
+[`docs/ANALYTICS.md`](docs/ANALYTICS.md).
+
 ### What is collected
 
 Pageviews (referrer, UTM, screen/viewport, timezone, language, device
