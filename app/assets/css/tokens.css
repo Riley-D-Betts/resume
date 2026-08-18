@@ -9,10 +9,10 @@
   --bg-0: #070a0b;   /* page void */
   --bg-1: #0a0e0f;   /* panel base */
   --bg-2: #101617;   /* raised / hover */
-  --bg-teal: #012a31; /* fobech section wash */
+  --bg-teal: #012a31; /* teal section wash */
 
   /* -- signal colors -------------------------------------- */
-  --teal: #007484;      /* fobech brand signal */
+  --teal: #007484;      /* teal signal */
   --teal-hot: #00b4c8;  /* active glow */
   --green: #2fd575;     /* OK / running */
   --amber: #ffb020;     /* warn / hold */

@@ -4,9 +4,8 @@
 
    The site presents Riley Betts' résumé as a mock Bettsuite ERP
    account: an Employee record, an Employment History list,
-   Project records, a Subsidiary (Fobech) and a Home dashboard
-   of portlets. Components render from this file and only from
-   this file.
+   Project records and a Home dashboard of portlets. Components
+   render from this file and only from this file.
    ============================================================ */
 
 /* ------------------------------------------------------------
@@ -153,12 +152,6 @@ export interface Project {
   featured?: boolean
 }
 
-/* ---- capabilities (Fobech subsidiary sublist) -------------- */
-export interface Capability {
-  title: string
-  desc: string
-}
-
 export interface ResumeContent {
   meta: { title: string; description: string }
   account: {
@@ -168,7 +161,6 @@ export interface ResumeContent {
     roleLabel: string
     accountName: string
     accountId: string
-    subsidiary: string
     environment: string
     release: string
   }
@@ -208,23 +200,12 @@ export interface ResumeContent {
     skills: SkillRow[]
   }
   positions: Position[]
-  fobech: {
-    name: string
-    legalName: string
-    url: string
-    taglines: [string, string]
-    blurb: string
-    cta: string
-    groups: FieldGroup[]
-    capabilities: Capability[]
-  }
   projects: Project[]
   contact: {
     intro: string
     email: string
     github: string
     githubUrl: string
-    fobech: string
     subjects: string[]
     footer: string
     privacyNotice: string
@@ -240,7 +221,7 @@ export const resume: ResumeContent = {
   meta: {
     title: 'Riley Betts — Home | Bettsuite',
     description:
-      'Riley Betts — IT Manager at Ida Milk, LLC (Suntado) and founder of Fobech. A résumé built as a working mock Bettsuite ERP account.',
+      'Riley Betts — IT Manager at Ida Milk, LLC (Suntado). A résumé built as a working mock Bettsuite ERP account.',
   },
 
   /* The mock account is RILEY'S OWN — a personal "Personnel Account",
@@ -253,7 +234,6 @@ export const resume: ResumeContent = {
     roleLabel: 'Administrator',
     accountName: 'Riley Betts',
     accountId: 'ACCT 42537',
-    subsidiary: 'Riley Betts : Fobech',
     environment: 'Production',
     release: '2026.2',
   },
@@ -322,10 +302,7 @@ export const resume: ResumeContent = {
         },
         {
           label: 'Relationships',
-          children: [
-            { label: 'Subsidiaries', to: '/fobech' },
-            { label: 'Positions', to: '/positions' },
-          ],
+          children: [{ label: 'Positions', to: '/positions' }],
         },
         {
           label: 'Supply Chain',
@@ -377,10 +354,7 @@ export const resume: ResumeContent = {
       items: [
         {
           label: 'Company',
-          children: [
-            { label: 'Company Information', to: '/employee' },
-            { label: 'Subsidiaries', to: '/fobech' },
-          ],
+          children: [{ label: 'Company Information', to: '/employee' }],
         },
         { label: 'Users/Roles', children: [{ label: 'Manage Roles', to: '/employee' }] },
       ],
@@ -406,7 +380,6 @@ export const resume: ResumeContent = {
         { label: 'New Message', to: '/contact' },
         { label: 'Email rbetts@idamilk.com', href: 'mailto:rbetts@idamilk.com' },
         { label: 'GitHub', href: 'https://github.com/Riley-D-Betts' },
-        { label: 'Fobech Studio', href: 'https://fobech.com' },
       ],
     },
   ],
@@ -416,13 +389,11 @@ export const resume: ResumeContent = {
     { label: 'Employee Record', to: '/employee' },
     { label: 'Employment History', to: '/positions' },
     { label: 'Projects', to: '/projects' },
-    { label: 'Fobech Studio', href: 'https://fobech.com' },
     { label: 'GitHub', href: 'https://github.com/Riley-D-Betts' },
   ],
 
   recentMenu: [
     { label: 'Riley Betts (Employee)', to: '/employee' },
-    { label: 'Fobech (Subsidiary)', to: '/fobech' },
     { label: 'SunApps MES (Project)', to: '/projects/sunapps-mes' },
     { label: 'Ida Milk, LLC (Position)', to: '/positions/ida-milk' },
     { label: 'KidCam (Project)', to: '/projects/kidcam' },
@@ -507,20 +478,17 @@ export const resume: ResumeContent = {
         { label: '2024', value: 5, note: 'Systems Analyst — intro to manufacturing' },
         { label: '2025', value: 6, note: 'IT Supervisor — solo operation' },
         { label: '2026', value: 7, note: 'IT Manager — founded the department' },
-        { label: '2026', value: 8, note: 'Founder — Fobech systems studio' },
       ],
     },
     reminders: [
       { count: '1', label: 'Employee record to review', tone: 'info', to: '/employee' },
-      { count: '4', label: 'Positions in employment history', tone: 'info', to: '/positions' },
+      { count: '3', label: 'Positions in employment history', tone: 'info', to: '/positions' },
       { count: '5', label: 'Projects online', tone: 'good', to: '/projects' },
-      { count: '1', label: 'Subsidiary awaiting your visit — Fobech', tone: 'good', to: '/fobech' },
       { count: '0', label: 'Messages awaiting reply', tone: 'good' },
       { count: '1', label: 'Channel open to hire this operator', tone: 'warn', to: '/contact' },
     ],
     recent: [
       { type: 'Employee', name: 'Riley Betts', glyph: '👤', to: '/employee' },
-      { type: 'Subsidiary', name: 'Fobech', glyph: '🏢', to: '/fobech' },
       { type: 'Project', name: 'SunApps MES', glyph: '📦', to: '/projects/sunapps-mes' },
       { type: 'Position', name: 'IT Manager — Ida Milk (Suntado)', glyph: '💼', to: '/positions/ida-milk' },
       { type: 'Project', name: 'KidCam', glyph: '📦', to: '/projects/kidcam' },
@@ -531,7 +499,6 @@ export const resume: ResumeContent = {
       { label: 'Employee Record', glyph: '👤', to: '/employee' },
       { label: 'Projects', glyph: '📦', to: '/projects' },
       { label: 'Employment History', glyph: '🗂', to: '/positions' },
-      { label: 'Fobech Studio', glyph: '↗', href: 'https://fobech.com' },
       { label: 'GitHub', glyph: '↗', href: 'https://github.com/Riley-D-Betts' },
     ],
     report: {
@@ -570,7 +537,6 @@ export const resume: ResumeContent = {
         fields: [
           { label: 'Email', value: 'riley.betts@outlook.com', href: 'mailto:riley.betts@outlook.com' },
           { label: 'GitHub', value: '@Riley-D-Betts', href: 'https://github.com/Riley-D-Betts' },
-          { label: 'Studio', value: 'fobech.com', href: 'https://fobech.com' },
           { label: 'Coordinates', value: '42.53°N, -113.79°W', mono: true },
         ],
       },
@@ -587,7 +553,7 @@ export const resume: ResumeContent = {
     bio: [
       'I run IT for a dairy manufacturer. That sentence undersells it. At a plant filling millions of units, "IT" means the ERP, the network, the servers, the cameras, the help desk, the dashboards on the floor, and the B2B pipes that keep trucks arriving.',
       'I got here by building. When the plant needed something that did not exist yet — a training system, or document control, or a way for partners to talk to us — the answer was rarely a purchase order. Most of it I built myself, or it got built under my direction, for close to zero dollars. The department started as one person keeping a very long list. The list eventually became a system, and the one person got to hire help.',
-      'The habit does not switch off at home. I build cameras for my kids, a wall dashboard for my kitchen, and manufacturing software for other plants through my studio, Fobech. If a tool does not fit the hand that uses it, I take that personally.',
+      'The habit does not switch off at home. I build cameras for my kids, a wall dashboard for my kitchen, and drawing apps for tiny artists. If a tool does not fit the hand that uses it, I take that personally.',
     ],
     skills: [
       {
@@ -698,63 +664,7 @@ export const resume: ResumeContent = {
       ],
       tags: ['AutoCAD', 'NetSuite', 'Solar', 'Permits', 'Sales'],
     },
-    {
-      id: 'fobech',
-      company: 'Fobech',
-      subtitle: 'Independent systems studio — Founder',
-      location: 'fobech.com',
-      start: '2026-05-27',
-      periodLabel: '2026 — Present',
-      titles: [{ title: 'Founder / Principal Engineer', period: 'Ongoing' }],
-      status: 'Active',
-      statusTone: 'teal',
-      summary:
-        'A boutique software studio for food & beverage manufacturers who keep buying software that almost fits. Fobech builds the part that never ships in a box.',
-      milestones: [
-        { note: 'Established the studio — custom F&B manufacturing software', type: 'Hired' },
-        { note: 'MES, lot traceability, QC gating and Andon — see the Fobech subsidiary record', type: 'Note' },
-      ],
-      tags: ['Nuxt', 'Cloudflare', 'SQLite', 'MES', 'Traceability'],
-    },
   ],
-
-  fobech: {
-    name: 'Fobech',
-    legalName: 'Fobech — Independent Systems Studio',
-    url: 'https://fobech.com',
-    taglines: ['Complexity Is Our Problem. Not Yours.', "We build what off-the-shelf can't."],
-    blurb:
-      'Fobech is my software studio. It exists because food & beverage manufacturers keep buying software that almost fits, then bending the plant around the software. Fobech bends the software around the plant: manufacturing execution, lot traceability that runs both directions, QC gating that actually gates, and Andon boards that tell the floor the truth in real time.',
-    cta: 'Visit fobech.com',
-    groups: [
-      {
-        title: 'Subsidiary Information',
-        fields: [
-          { label: 'Name', value: 'Fobech' },
-          { label: 'Legal Name', value: 'Fobech — Independent Systems Studio' },
-          { label: 'Type', value: 'Software Studio (F&B Manufacturing)' },
-          { label: 'Principal', value: 'Riley Betts', href: '/employee' },
-          { label: 'Website', value: 'fobech.com', href: 'https://fobech.com' },
-          { label: 'Status', value: 'Active', tone: 'teal' },
-        ],
-      },
-      {
-        title: 'Stack',
-        fields: [
-          { label: 'Frontend', value: 'Nuxt' },
-          { label: 'Edge / Data', value: 'Cloudflare · SQLite' },
-          { label: 'Focus', value: 'MES · Traceability · QC · Andon' },
-          { label: 'Model', value: 'Boutique, built-to-fit' },
-        ],
-      },
-    ],
-    capabilities: [
-      { title: 'MES', desc: 'Work orders · station ops · line state' },
-      { title: 'Lot Traceability', desc: 'Forward + backward · instant recall scope' },
-      { title: 'QC Hold / Release', desc: 'Gated flow · nothing ships on a guess' },
-      { title: 'Andon / Live Status', desc: 'Live boards · no massaged numbers' },
-    ],
-  },
 
   projects: [
     {
@@ -778,7 +688,7 @@ export const resume: ResumeContent = {
       status: 'Active Dev',
       statusTone: 'green',
       blurb:
-        'Manufacturing execution built next to a real production floor: work orders, station operations, and line status that operators actually use. The proving ground for the ideas Fobech ships.',
+        'Manufacturing execution built next to a real production floor: work orders, station operations, and line status that operators actually use.',
       specs: ['MES', 'Work Orders', 'Line Status', 'Shop-Floor UI'],
       links: [{ label: 'GitHub', href: 'https://github.com/Riley-D-Betts/SunApps_MES' }],
     },
@@ -829,10 +739,8 @@ export const resume: ResumeContent = {
     email: 'rbetts@idamilk.com',
     github: '@Riley-D-Betts',
     githubUrl: 'https://github.com/Riley-D-Betts',
-    fobech: 'fobech.com',
     subjects: [
       'Hiring / role inquiry',
-      'Fobech — custom F&B software',
       'Consulting / systems help',
       'Just saying hello',
     ],

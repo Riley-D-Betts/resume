@@ -97,12 +97,6 @@ function reset(): void {
               </span>
             </div>
             <div class="ns-field">
-              <span class="ns-field__label">Studio</span>
-              <span class="ns-field__value">
-                <a href="https://fobech.com" target="_blank" rel="noopener">{{ c.fobech }}</a>
-              </span>
-            </div>
-            <div class="ns-field">
               <span class="ns-field__label">Location</span>
               <span class="ns-field__value">{{ resume.identity.location }} · {{ resume.identity.timezone }}</span>
             </div>
