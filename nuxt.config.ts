@@ -31,13 +31,13 @@ export default defineNuxtConfig({
         {
           name: 'description',
           content:
-            'Riley Betts — IT Manager, Ida Milk (Suntado). A résumé built as a working mock Bettsuite ERP account. Founder, Fobech.',
+            'Riley Betts — IT Manager, Ida Milk (Suntado). A résumé built as a working mock Bettsuite ERP account.',
         },
         { name: 'theme-color', content: '#223140' },
         { property: 'og:title', content: 'Riley Betts — Bettsuite Personnel Account' },
         {
           property: 'og:description',
-          content: 'IT Manager. Systems builder. Founder of Fobech. This résumé is a working mock Bettsuite UI.',
+          content: 'IT Manager. Systems builder. This résumé is a working mock Bettsuite UI.',
         },
         { property: 'og:type', content: 'website' },
       ],

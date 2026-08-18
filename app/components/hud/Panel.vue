@@ -1,7 +1,7 @@
 <script setup lang="ts">
 defineProps<{
   title?: string
-  /** tint the chrome teal (fobech section) */
+  /** tint the chrome teal */
   teal?: boolean
 }>()
 </script>

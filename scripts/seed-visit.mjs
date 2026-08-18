@@ -122,15 +122,15 @@ const envelopeB = {
     { t: t0 + 15_000, type: 'section_exit', name: 'profile', p: { dwellMs: 6_400 } },
     { t: t0 + 15_100, type: 'section_enter', name: 'opslog' },
     { t: t0 + 22_000, type: 'section_exit', name: 'opslog', p: { dwellMs: 6_900 } },
-    { t: t0 + 22_100, type: 'section_enter', name: 'fobech' },
-    { t: t0 + 31_000, type: 'section_exit', name: 'fobech', p: { dwellMs: 8_900 } },
+    { t: t0 + 22_100, type: 'section_enter', name: 'projects' },
+    { t: t0 + 31_000, type: 'section_exit', name: 'projects', p: { dwellMs: 8_900 } },
     { t: t0 + 9_000, type: 'scroll_depth', p: { pct: 25 } },
     { t: t0 + 16_000, type: 'scroll_depth', p: { pct: 50 } },
     { t: t0 + 24_000, type: 'scroll_depth', p: { pct: 75 } },
     {
       t: t0 + 26_000,
       type: 'click',
-      p: { sel: 'section[data-section="fobech"] .panel a', text: 'FOBECH.COM', x: 712, y: 640, section: 'fobech' },
+      p: { sel: 'section[data-section="projects"] .panel a', text: 'PROJECTS', x: 712, y: 640, section: 'projects' },
     },
     {
       t: t0 + 40_000,

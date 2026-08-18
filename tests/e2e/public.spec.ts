@@ -63,15 +63,6 @@ test('role center renders, records navigate, zero console errors', async ({ page
   await expect(page.getByRole('heading', { name: 'Project' })).toBeVisible()
   await page.screenshot({ path: path.join(SCREENS_DIR, `project-${testInfo.project.name}.png`), fullPage: true })
 
-  // -- Fobech subsidiary ----------------------------------------------
-  await page.goto('/fobech')
-  await expect(page.getByRole('heading', { name: 'Subsidiary' })).toBeVisible()
-  await expect(page.locator('.ns-record-name')).toContainText('Fobech')
-  // the studio's positioning lives on the About subtab
-  await page.getByRole('tab', { name: /About/ }).click()
-  await expect(page.getByText('Complexity Is Our Problem').first()).toBeVisible()
-  await page.screenshot({ path: path.join(SCREENS_DIR, `fobech-${testInfo.project.name}.png`), fullPage: true })
-
   expect(errors, `console errors:\n${errors.join('\n')}`).toEqual([])
 })
 

@@ -3,7 +3,7 @@
 A résumé built as a working mock Riley Bettsuite ERP account. The career
 is presented the way Bettsuite presents data: a Home dashboard (Role
 Center) of portlets, an Employee record with subtabs and sublists, an
-Employment History list, Project records and a Fobech "subsidiary".
+Employment History list and Project records.
 
 The costume is built against Bettsuite's own published design tokens and
 Riley's own screenshots rather than from memory, so the details are the
@@ -29,7 +29,6 @@ chunks, a cron trigger prunes both — all inside the free tier.
 | `/employee` | the Employee record — bio, skills sublist, system notes |
 | `/positions`, `/positions/:id` | Employment History list + Position records |
 | `/projects`, `/projects/:id` | Projects list + Project records |
-| `/fobech` | the Fobech subsidiary record |
 | `/colophon` | Customization > Scripting — how the site is built |
 | `/contact` | compose a message (opens your mail client) |
 | `/ops` | admin console: traffic overview, session explorer, rrweb replay player |
@@ -53,9 +52,8 @@ inside `nuxt dev`; local state lives under `.wrangler/state/`.
 Every word on the page lives in `app/data/resume.ts`, the single source of
 truth, shaped as Bettsuite records: the account/masthead, the Main Menu
 tree, the Employee record and its skills, dashboard
-KPIs/meter/trend/reminders, the work history positions, project records,
-the Fobech subsidiary and contact details. Edit that one typed file and
-the site follows.
+KPIs/meter/trend/reminders, the work history positions, project records
+and contact details. Edit that one typed file and the site follows.
 
 Components never hardcode copy; if you want to change what the site says,
 you never have to touch a `.vue` file. The Bettsuite look lives in

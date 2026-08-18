@@ -16,7 +16,7 @@ const activeId = computed(() => {
   const p = route.path
   if (p === '/') return 'home'
   if (p.startsWith('/positions')) return 'activities'
-  if (p.startsWith('/employee') || p.startsWith('/projects') || p.startsWith('/fobech')) return 'lists'
+  if (p.startsWith('/employee') || p.startsWith('/projects')) return 'lists'
   if (p.startsWith('/colophon')) return 'customization'
   if (p.startsWith('/contact')) return 'support'
   return ''

@@ -21,13 +21,6 @@ export function useSearchIndex(): SearchHit[] {
       .join(' ')}`.toLowerCase(),
   })
 
-  hits.push({
-    type: 'Subsidiary',
-    name: resume.fobech.name,
-    to: '/fobech',
-    terms: `fobech studio mes traceability qc andon manufacturing software ${resume.fobech.taglines.join(' ')}`.toLowerCase(),
-  })
-
   for (const p of resume.positions) {
     hits.push({
       type: 'Position',

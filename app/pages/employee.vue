@@ -8,7 +8,6 @@ const toast = useToast()
 
 const actions = [
   { label: 'Send Email', href: 'mailto:rbetts@idamilk.com' },
-  { label: 'Open Subsidiary: Fobech', to: '/fobech' },
   { label: 'View Employment History', to: '/positions' },
   { label: 'Make Copy', toast: 'There is only one of him.' },
 ]
@@ -20,7 +19,6 @@ const systemNotes = [
   { date: '11/18/2024', field: 'Job Title', change: '— → IT Supervisor', by: 'System' },
   { date: '2025', field: 'Job Title', change: 'IT Supervisor → Information Technology Manager', by: 'System' },
   { date: '2025', field: 'Role', change: 'User → Administrator', by: 'System' },
-  { date: '2026', field: 'Subsidiary', change: 'added → Fobech (Founder)', by: resume.identity.name },
 ]
 
 const readOnly = () => toast.show('This record is read-only — you have look-but-don’t-touch Administrator access.')
@@ -106,11 +104,6 @@ const readOnly = () => toast.show('This record is read-only — you have look-bu
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td class="ns-table__actions"><NuxtLink to="/fobech">View</NuxtLink></td>
-                <td>Subsidiary</td>
-                <td class="ns-table__name"><NuxtLink to="/fobech">Fobech</NuxtLink></td>
-              </tr>
               <tr v-for="(p, i) in resume.positions" :key="p.id">
                 <td class="ns-table__actions"><NuxtLink :to="`/positions/${p.id}`">View</NuxtLink></td>
                 <td>Position</td>

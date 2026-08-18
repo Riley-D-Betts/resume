@@ -14,7 +14,7 @@ import { expect, test } from '@playwright/test'
  * D1_DB_PATH overrides the discovered SQLite path.
  */
 
-const SECTIONS = ['sys', 'profile', 'opslog', 'fobech', 'bays', 'comms'] as const
+const SECTIONS = ['sys', 'profile', 'opslog', 'bays', 'comms'] as const
 
 /** Newest .sqlite under miniflare's local D1 state — the dev database. */
 function findLocalD1(): string | undefined {
