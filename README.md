@@ -311,10 +311,20 @@ local D1 file (per-page visits chained by `from_path`, section and scroll
 events on the second page, a mailto handoff, the typed side tables, a
 replay chunk keyed by its recording id), a deep landing, the scroll-reset
 rule, and an intercept test that pins the wire payloads without D1.
-`ops.spec.ts` is **desktop-only**: the login gate (a wrong password is
-refused), the overview, the sessions list and a session detail with its
-event timeline and replay player. Screenshots land in
-`test-results/screens/`. `BASE_URL`,
+`ops.spec.ts` is **desktop-only** and logs in once (the login endpoint
+allows 5 attempts a minute): the login gate (a wrong password is refused
+through the `role="alert"` denial), the overview (tiles, sparkline, filter
+bar, live strip, range switching, COMPARE deltas, the D1 size / ≈ count
+readout), a console-error-free smoke of every console page — the `/ops`
+CSP is validated there, a violation surfaces as a console error — a
+future custom range (`NO SESSIONS IN RANGE`), the seeded replay session's
+detail (event timeline, path timeline, environment panel and an rrweb
+`.rr-player` that actually mounts), Orgs → detail and Pages → detail, the
+SQL console (a comment is whitespace, `SELECT 1; SELECT 2` and `DELETE`
+are rejected with the row count unchanged, `EXPLAIN QUERY PLAN` runs, the
+schema browser lists `sessions`), the sessions CSV export (button and
+endpoint headers) and a 401 sweep of every `/api/ops/*` route without the
+cookie. Screenshots land in `test-results/screens/`. `BASE_URL`,
 `OPS_PASSWORD`, `D1_DB_PATH` and `PW_EXEC` (path to a Chromium binary)
 retarget the suite.
 
