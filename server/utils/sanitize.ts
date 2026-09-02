@@ -725,8 +725,10 @@ function sanitizeEvent(raw: Record<string, unknown>, ctx: Ctx, out: ParsedEnvelo
       break
     }
     case 'form': {
-      name = clampStr(raw.name, 20)
-      if (name !== 'contact') return null
+      // contact.vue names the event after the step; the seed names it 'contact'.
+      // Either is fine — the step lives in the payload, so store one name.
+      if (raw.name != null && clampStr(raw.name, 20) === null) return null
+      name = 'contact'
       const step = asEnum(p.step, ['focus', 'input', 'field', 'submit', 'invalid', 'reset', 'abandon'] as const)
       if (!step) return null
       payload = compact({

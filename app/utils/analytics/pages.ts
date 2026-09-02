@@ -230,23 +230,37 @@ export function setupPages(deps: PagesDeps): Pages {
     { passive: true },
   )
 
-  /** Arm milestone measuring only after the router's scroll restore (K3). */
+  /**
+   * Arm milestone measuring only after the router's scroll restore (K3).
+   * The site scrolls smoothly (`html { scroll-behavior: smooth }`), so the
+   * router's scroll-to-top is a ~400 ms animation: measuring on the next
+   * frame would read the OLD page's position against the NEW document and
+   * fire every milestone. Wait until scrollY holds still for two frames
+   * (capped at 700 ms), then arm.
+   */
   const armScroll = (): void => {
     armed = false
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() =>
-        setTimeout(
-          safe(() => {
-            armed = true
-            lastY = scrollY
-            lastT = performance.now()
-            lastDir = 0
-            measureDepth()
-          }),
-          0,
-        ),
-      ),
-    )
+    const startedAt = performance.now()
+    let prevY = -1
+    let stable = 0
+    const tick = safe((): void => {
+      const y = scrollY
+      if (y === prevY) stable++
+      else {
+        stable = 0
+        prevY = y
+      }
+      if (stable >= 2 || performance.now() - startedAt > 700) {
+        armed = true
+        lastY = scrollY
+        lastT = performance.now()
+        lastDir = 0
+        measureDepth()
+        return
+      }
+      requestAnimationFrame(tick)
+    })
+    requestAnimationFrame(() => requestAnimationFrame(tick))
   }
 
   const measureText = (): void => {

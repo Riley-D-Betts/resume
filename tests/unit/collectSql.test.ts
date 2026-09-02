@@ -345,7 +345,7 @@ test('ingest mapping: every event type flows through sanitize → binds → SQL 
     ev('select', { len: 300, hasEmail: false }, { u: '/employee' }, 25100),
     ev('form', { step: 'focus', field: 'body' }, { name: 'contact', u: '/contact' }, 26000),
     ev('form', { step: 'submit', subject: 'Job', bodyLen: 120, authorFilled: true, msSinceFocus: 40000 }, { name: 'contact', u: '/contact' }, 26500),
-    ev('form', { step: 'submit' }, { name: 'other', u: '/contact' }, 26600),
+    ev('form', { step: 'bogus' }, { name: 'other', u: '/contact' }, 26600), // invalid step → dropped (any name is accepted)
     ev('find', undefined, { u: '/contact' }, 27000),
     ev('site_search', { q: 'NetSuite', results: 3, chosen: 'Employee' }, { u: '/contact' }, 27500),
     ev('exit_intent', { x: 500, y: -2 }, { u: '/contact' }, 28000),
@@ -378,7 +378,7 @@ test('ingest mapping: every event type flows through sanitize → binds → SQL 
   const types = parsed.events.map((e) => e.type)
   for (const t of ['heartbeat', 'env', 'vitals', 'perf', 'bogus_type']) assert.ok(!types.includes(t as never), `${t} must not become a row`)
   assert.equal(types.filter((t) => t === 'hover').length, 1, 'bad hover key dropped')
-  assert.equal(types.filter((t) => t === 'form').length, 2, 'non-contact form dropped')
+  assert.equal(types.filter((t) => t === 'form').length, 2, 'invalid-step form dropped')
   assert.equal(types.filter((t) => t === 'click').length, 2, 'NaN-t click dropped')
   for (const t of ['js_error', 'resource_error', 'console_error']) {
     const e = parsed.events.find((x) => x.type === t)!
