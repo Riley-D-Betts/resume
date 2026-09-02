@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { resume } from '~/data/resume'
 import { useSearchIndex } from '~/composables/useSearchIndex'
+import { useTrack } from '~/composables/useTrack'
 
 /**
  * Bettsuite's "Masthead" — the LIGHT top row. Riley documents it as
@@ -11,6 +12,7 @@ import { useSearchIndex } from '~/composables/useSearchIndex'
 const account = resume.account
 const index = useSearchIndex()
 const router = useRouter()
+const track = useTrack()
 
 const query = ref('')
 const open = ref(false)
@@ -27,7 +29,24 @@ watch(results, () => {
   cursor.value = 0
 })
 
+// ---- site_search (contract B.4) --------------------------------------
+// What visitors type into the global search is intent worth keeping:
+// reported once per distinct query, on Enter, on picking a result (which
+// adds `chosen`) or on leaving the field. Lowercased, ≤ 40 chars.
+const reported = new Set<string>()
+
+function normQ(raw: string): string {
+  return raw.trim().toLowerCase().slice(0, 40)
+}
+
+function reportSearch(q: string, n: number, chosen?: string): void {
+  if (q.length < 3 || reported.has(q)) return
+  reported.add(q)
+  track('site_search', q, { q, results: n, ...(chosen ? { chosen } : {}) })
+}
+
 function go(hit: { to?: string; href?: string }): void {
+  reportSearch(normQ(query.value), results.value.length, (hit.to ?? hit.href ?? '').slice(0, 40))
   open.value = false
   query.value = ''
   if (hit.to) router.push(hit.to)
@@ -37,6 +56,7 @@ function go(hit: { to?: string; href?: string }): void {
 function onEnter(): void {
   const hit = results.value[cursor.value]
   if (hit) go(hit)
+  else reportSearch(normQ(query.value), results.value.length)
 }
 
 function move(delta: number): void {
@@ -45,13 +65,19 @@ function move(delta: number): void {
 }
 
 function onBlur(): void {
-  // let a click on a result register before closing
-  setTimeout(() => (open.value = false), 150)
+  const q = normQ(query.value)
+  const n = results.value.length
+  // let a click on a result register before closing — and before this
+  // report, so a selection wins and carries its `chosen`
+  setTimeout(() => {
+    open.value = false
+    reportSearch(q, n)
+  }, 150)
 }
 </script>
 
 <template>
-  <header class="ns-mast">
+  <header class="ns-mast" data-zone="masthead">
     <NuxtLink to="/" class="ns-logo" aria-label="Riley Bettsuite home">
       <span class="ns-logo__riley">RILEY</span>
       <span class="ns-logo__word">Bettsuite</span>
@@ -99,7 +125,7 @@ function onBlur(): void {
 
     <div class="ns-mast__tools">
       <!-- Create New: a page outline with a + at its lower left -->
-      <NuxtLink to="/contact" class="ns-iconbtn" title="Create New" aria-label="Create New">
+      <NuxtLink to="/contact" class="ns-iconbtn" title="Create New" aria-label="Create New" data-track-hover="contact-cta">
         <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
           <path d="M4 1.5h5l3 3v10H4z" fill="none" stroke="currentColor" stroke-width="1.2" />
           <path d="M9 1.5v3.2h3.2" fill="none" stroke="currentColor" stroke-width="1.2" />
@@ -121,7 +147,7 @@ function onBlur(): void {
         </svg>
         <span class="ns-iconbtn__label">Help</span>
       </NuxtLink>
-      <a :href="`mailto:${resume.identity.email}`" class="ns-iconbtn" aria-label="Feedback">
+      <a :href="`mailto:${resume.identity.email}`" class="ns-iconbtn" aria-label="Feedback" data-track-hover="email">
         <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
           <path d="M1.6 2.5h12.8v9H8.6L5 14.2V11.5H1.6z" fill="none" stroke="currentColor" stroke-width="1.2" />
           <circle cx="5.2" cy="7" r="0.85" fill="currentColor" />

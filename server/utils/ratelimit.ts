@@ -31,7 +31,8 @@ function sweep(): void {
 export function rateLimit(bucket: string, key: string, limit: number, windowMs: number): boolean {
   if (!sweepTimer) {
     sweepTimer = setInterval(sweep, SWEEP_INTERVAL_MS)
-    sweepTimer.unref?.()
+    // Node returns a Timeout (unref-able); Workers return a number.
+    ;(sweepTimer as unknown as { unref?: () => void }).unref?.()
   }
 
   const now = Date.now()

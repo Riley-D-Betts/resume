@@ -26,10 +26,15 @@ const actions = [
   { label: 'Back to Home', to: '/' },
   ...(p.links[0] ? [{ label: `Open ${p.links[0].label}`, href: p.links[0].href }] : []),
 ]
+
+/** Hover-intent key for a repository link: `github` when it points at github.com. */
+function hoverKey(href: string): string | undefined {
+  return /^https?:\/\/(www\.)?github\.com(\/|$)/i.test(href) ? 'github' : undefined
+}
 </script>
 
 <template>
-  <div data-section="project">
+  <div data-page="project">
 
     <NsRecordHeader type="Project" :name="p.name" :record-id="p.code" :status-label="p.status">
       <template #actions>
@@ -38,23 +43,30 @@ const actions = [
         </button>
         <NuxtLink to="/projects" class="ns-btn">Back</NuxtLink>
         <NsActionMenu :items="actions" />
-        <a v-if="p.links[0]" :href="p.links[0].href" target="_blank" rel="noopener" class="ns-btn ns-btn--primary">
+        <a
+          v-if="p.links[0]"
+          :href="p.links[0].href"
+          target="_blank"
+          rel="noopener"
+          class="ns-btn ns-btn--primary"
+          :data-track-hover="hoverKey(p.links[0].href)"
+        >
           {{ p.links[0].label }}
         </a>
       </template>
     </NsRecordHeader>
 
-    <NsFieldGroup :group="detailGroup" />
+    <NsFieldGroup :group="detailGroup" section="project.primary" />
 
     <div class="ns-secbar">Description</div>
-    <div class="ns-fieldgroup">
+    <div class="ns-fieldgroup" data-section="project.description">
       <div class="ns-prose">
         <p>{{ p.blurb }}</p>
       </div>
     </div>
 
     <NsSubtabs :tabs="['Specifications', 'Links']" v-slot="{ active }">
-        <div v-show="active === 0" class="ns-subpanel">
+        <div v-show="active === 0" class="ns-subpanel" data-section="project.specs">
           <div class="ns-tablescroll">
             <table class="ns-table">
               <thead>
@@ -71,7 +83,7 @@ const actions = [
           </div>
         </div>
 
-        <div v-show="active === 1" class="ns-subpanel">
+        <div v-show="active === 1" class="ns-subpanel" data-section="project.links">
           <div v-if="p.links.length" class="ns-tablescroll">
             <table class="ns-table">
               <thead>
@@ -84,7 +96,7 @@ const actions = [
                 <tr v-for="(l, i) in p.links" :key="l.href">
                   <td class="ns-table__name">{{ l.label }}</td>
                   <td>
-                    <a :href="l.href" target="_blank" rel="noopener">{{ l.href }}</a>
+                    <a :href="l.href" target="_blank" rel="noopener" :data-track-hover="hoverKey(l.href)">{{ l.href }}</a>
                   </td>
                 </tr>
               </tbody>
@@ -96,7 +108,7 @@ const actions = [
         </div>
     </NsSubtabs>
 
-    <div class="ns-buttonbar ns-buttonbar--secondary">
+    <div class="ns-buttonbar ns-buttonbar--secondary" data-zone="record-actions">
       <NuxtLink to="/projects" class="ns-btn">Back</NuxtLink>
       <NuxtLink to="/employee" class="ns-btn">View Employee</NuxtLink>
     </div>

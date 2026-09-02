@@ -54,22 +54,55 @@ export default defineNuxtConfig({
   },
 
   routeRules: {
-    '/ops/**': { headers: { 'X-Robots-Tag': 'noindex, nofollow' }, ssr: false },
+    // The console renders untrusted rrweb DOM (session replay), so it gets a
+    // CSP (audit A27). 'unsafe-inline' is what the Nuxt SPA shell and the
+    // rrweb player stylesheet need; everything stays same-origin. Fonts are
+    // served from /_fonts by @nuxt/fonts, replay frames are blob: iframes.
+    '/ops/**': {
+      headers: {
+        'X-Robots-Tag': 'noindex, nofollow',
+        'Content-Security-Policy':
+          "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; frame-src 'self' blob:; font-src 'self' data:",
+      },
+      ssr: false,
+    },
     '/api/**': { headers: { 'X-Robots-Tag': 'noindex' } },
   },
 
   runtimeConfig: {
     // Secrets come in as NUXT_* env vars — on Cloudflare set them with
     // `wrangler secret put NUXT_ADMIN_PASSWORD` / `NUXT_SESSION_PASSWORD`;
-    // the rest are plain vars in wrangler.jsonc.
+    // the rest are plain vars in wrangler.jsonc (mirrored in .env.example).
     adminPassword: '',
     sessionPassword: '',
+    // Trust x-real-ip / x-forwarded-for when cf-connecting-ip is absent. Only
+    // matters off Cloudflare (nuxt dev, non-CF hosts) — the edge header wins.
     trustProxy: true,
+    // Retention in days, enforced by the daily prune cron (server/plugins/prune.ts).
     replayRetentionDays: 30,
+    // events + page_perf. 180 (not 90): the 500 MB D1 cap is far away at this
+    // traffic; the overview's sizeBytes readout says when to lower it.
     eventRetentionDays: 180,
+    // page_visits, session_env, session_net.
+    sideTableRetentionDays: 365,
+    // After this, ip / ua / lat / lon are nulled on old sessions (audit A20).
+    piiRetentionDays: 365,
+    // 0 = keep sessions/visitors forever (only counters + facts remain after
+    // the PII scrub); > 0 deletes whole sessions past that age, ≤ 100 per run.
+    sessionRetentionDays: 0,
+    // Zero the last IPv4 octet / truncate IPv6 to /48 before storing.
     ipAnonymize: false,
+    // Sec-GPC / DNT are always recorded; when true, /api/collect also drops
+    // envelopes from GPC/DNT requests. Keep in sync with public.honorGpc.
+    honorGpc: false,
+    // Reverse DNS via Cloudflare DoH for the session IP (cached in rdns_cache).
+    // Ignored while ipAnonymize is on — a PTR of a zeroed octet is meaningless.
+    rdnsEnabled: false,
     public: {
+      // Fraction of sessions that get rrweb replay recording, 0..1.
       replaySampleRate: 1,
+      // Client-side twin of honorGpc: the tracker does not start under GPC.
+      honorGpc: false,
     },
   },
 

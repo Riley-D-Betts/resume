@@ -1,56 +1,57 @@
+import type { SessionRow, SessionsPage } from '../../../shared/analytics/ops'
 import { requireAdmin } from '../../utils/auth'
+import { getDb } from '../../utils/db'
+import { batchAll, bindStmt, toNum } from '../../utils/opsDb'
+import { buildWhere, intParam, parseOpsQuery, parseWindow, sessionProjection, sortSpec } from '../../utils/opsFilters'
 
-const DAY_MS = 86_400_000
-const RANGE_MS: Record<string, number> = {
-  '24h': DAY_MS,
-  '7d': 7 * DAY_MS,
-  '30d': 30 * DAY_MS,
-}
-
-function rangeStart(range: unknown): number {
-  if (range === 'all') return 0
-  const ms = (typeof range === 'string' && RANGE_MS[range]) || RANGE_MS['7d']!
-  return Date.now() - ms
-}
-
-function intParam(v: unknown, fallback: number, min: number, max: number): number {
-  const n = Number.parseInt(String(v ?? ''), 10)
-  if (!Number.isFinite(n)) return fallback
-  return Math.min(max, Math.max(min, n))
+const SORTS: Record<string, string> = {
+  started_at: 's.started_at',
+  duration_ms: 's.duration_ms',
+  pageviews: 's.pageviews',
 }
 
 /**
- * GET /api/ops/sessions?range=…&bots=1&country=…&replay=1&limit=…&offset=…
- * Paged session listing, newest first.
+ * GET /api/ops/sessions — keyset-paged listing (audit A24): newest first by
+ * default; `before=<sort value of the last row>&beforeSid=<its sid>` fetches
+ * the next page via `(col < ? OR (col = ? AND sid < ?))`; `total` only on the
+ * first page. Explicit projection (+ ip / ua with `fields=full`) and the
+ * ACTIVE subquery. Uncached.
  */
-export default defineEventHandler(async (event) => {
+export default defineEventHandler(async (event): Promise<SessionsPage> => {
   await requireAdmin(event)
-
-  const q = getQuery(event)
-  const limit = intParam(q.limit, 50, 1, 200)
-  const offset = intParam(q.offset, 0, 0, Number.MAX_SAFE_INTEGER)
-
-  const where: string[] = ['started_at >= ?']
-  const args: (string | number)[] = [rangeStart(q.range)]
-  if (q.bots !== '1') where.push('is_bot = 0')
-  if (q.replay === '1') where.push('has_replay = 1')
-  const country = typeof q.country === 'string' ? q.country.trim() : ''
-  if (country) {
-    // SQLite LIKE is case-insensitive for ASCII; ESCAPE guards user wildcards.
-    where.push(`country LIKE ? ESCAPE '\\'`)
-    args.push(`%${country.replace(/[\\%_]/g, m => `\\${m}`)}%`)
-  }
-  const cond = where.join(' AND ')
-
+  const q = parseOpsQuery(getQuery(event) as Record<string, unknown>)
+  const w = parseWindow(q)
   const db = getDb(event)
-  const [totalRow, rowsRes] = await Promise.all([
-    db.prepare(`SELECT COUNT(*) AS n FROM sessions WHERE ${cond}`)
-      .bind(...args)
-      .first<{ n: number }>(),
-    db.prepare(`SELECT * FROM sessions WHERE ${cond} ORDER BY started_at DESC LIMIT ? OFFSET ?`)
-      .bind(...args, limit, offset)
-      .all<Record<string, unknown>>(),
-  ])
+  const where = buildWhere(q, w)
+  const limit = intParam(q.limit, 50, 1, 200)
+  const sort = sortSpec(q, SORTS, 'started_at')
+  const full = q.fields === 'full'
 
-  return { total: totalRow!.n, rows: rowsRes.results }
+  let cursorSql = ''
+  const cursorArgs: unknown[] = []
+  const before = q.before === undefined ? Number.NaN : Number(q.before)
+  const hasCursor = Number.isFinite(before) && typeof q.beforeSid === 'string'
+  if (hasCursor) {
+    const op = sort.dir === 'DESC' ? '<' : '>'
+    cursorSql = ` AND (${sort.col} ${op} ? OR (${sort.col} = ? AND s.sid ${op} ?))`
+    cursorArgs.push(before, before, q.beforeSid)
+  }
+
+  const res = await batchAll(db, [
+    bindStmt(
+      db,
+      `SELECT ${sessionProjection('s', full)} FROM sessions s WHERE ${where.sql}${cursorSql} ORDER BY ${sort.col} ${sort.dir}, s.sid ${sort.dir} LIMIT ?`,
+      [...where.args, ...cursorArgs, limit + 1],
+    ),
+    hasCursor ? bindStmt(db, 'SELECT 1 AS x') : bindStmt(db, `SELECT COUNT(*) AS n FROM sessions s WHERE ${where.sql}`, where.args),
+  ])
+  const all = (res[0] ?? []) as unknown as SessionRow[]
+  const rows = all.slice(0, limit)
+  const last = rows[rows.length - 1]
+  const more = all.length > limit && last !== undefined
+  return {
+    total: hasCursor ? null : toNum(res[1]?.[0]?.n),
+    rows,
+    next: more ? { before: toNum((last as unknown as Record<string, unknown>)[sort.key]), beforeSid: last.sid } : null,
+  }
 })

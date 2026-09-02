@@ -11,7 +11,9 @@
     "db:migrate:local": "wrangler d1 migrations apply resume-analytics --local",
     "db:migrate:remote": "wrangler d1 migrations apply resume-analytics --remote",
     "postinstall": "nuxt prepare",
+    "typecheck": "nuxt typecheck",
     "seed": "node scripts/seed-visit.mjs",
+    "test:unit": "node --test tests/unit/*.test.ts",
     "test:e2e": "playwright test -c tests"
   },
   "dependencies": {
@@ -24,8 +26,11 @@
     "@cloudflare/workers-types": "^5",
     "@nuxt/fonts": "^0.14.0",
     "@playwright/test": "^1.56.0",
+    "@rrweb/types": "^2.1.1",
+    "@types/node": "^22.20.1",
     "nitro-cloudflare-dev": "^0.2.2",
     "typescript": "^5.6.0",
+    "vue-tsc": "^3.0.0",
     "wrangler": "^4"
   }
 }

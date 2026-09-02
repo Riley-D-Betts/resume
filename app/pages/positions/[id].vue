@@ -33,7 +33,7 @@ const actions = [
 </script>
 
 <template>
-  <div data-section="position">
+  <div data-page="position">
 
     <NsRecordHeader type="Position" :name="p.company" :record-id="internalId" :status-label="p.status">
       <template #actions>
@@ -45,17 +45,17 @@ const actions = [
       </template>
     </NsRecordHeader>
 
-    <NsFieldGroup :group="detailGroup" />
+    <NsFieldGroup :group="detailGroup" section="position.primary" />
 
     <div class="ns-secbar">Summary</div>
-    <div class="ns-fieldgroup">
+    <div class="ns-fieldgroup" data-section="position.summary">
       <div class="ns-prose">
         <p>{{ p.summary }}</p>
       </div>
     </div>
 
     <NsSubtabs :tabs="['Milestones', 'Title History', 'Classification']" v-slot="{ active }">
-        <div v-show="active === 0" class="ns-subpanel">
+        <div v-show="active === 0" class="ns-subpanel" data-section="position.milestones">
           <ul class="ns-milestones">
             <li v-for="(m, i) in p.milestones" :key="i" class="ns-milestone">
               <span class="ns-milestone__stamp">{{ m.type }}</span>
@@ -64,7 +64,7 @@ const actions = [
           </ul>
         </div>
 
-        <div v-show="active === 1" class="ns-subpanel">
+        <div v-show="active === 1" class="ns-subpanel" data-section="position.titles">
           <div class="ns-tablescroll">
             <table class="ns-table">
               <thead>
@@ -83,12 +83,12 @@ const actions = [
           </div>
         </div>
 
-        <div v-show="active === 2" class="ns-subpanel">
+        <div v-show="active === 2" class="ns-subpanel" data-section="position.classification">
           <p>{{ p.tags.join(', ') }}</p>
         </div>
     </NsSubtabs>
 
-    <div class="ns-buttonbar ns-buttonbar--secondary">
+    <div class="ns-buttonbar ns-buttonbar--secondary" data-zone="record-actions">
       <NuxtLink to="/positions" class="ns-btn">Back</NuxtLink>
       <NuxtLink to="/employee" class="ns-btn">View Employee</NuxtLink>
     </div>

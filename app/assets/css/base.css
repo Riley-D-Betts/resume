@@ -74,8 +74,11 @@ button {
   cursor: pointer;
 }
 
-/* Anchor jumps must clear the fixed HUD bar. */
-[data-section] {
+/* Anchor jumps must clear the fixed HUD bar. `data-page` marks a page
+   root, `data-section` the sub-blocks analytics observes; both are inert
+   hooks apart from this scroll margin. */
+[data-section],
+[data-page] {
   scroll-margin-top: calc(var(--hud-h) + 8px);
 }
 
@@ -125,7 +128,10 @@ button {
   }
 }
 
-/* -- honeypot: must be unreachable by humans --------------- */
+/* -- honeypot: must be unreachable by humans ---------------
+   Rendered once by NsFooter. Invisible, unfocusable, unclickable and
+   out of the accessibility tree; only a crawler that ignores robots.txt
+   ever follows it. */
 .void-link {
   position: absolute;
   width: 1px;
@@ -133,5 +139,6 @@ button {
   overflow: hidden;
   clip-path: inset(50%);
   opacity: 0;
+  visibility: hidden;
   pointer-events: none;
 }

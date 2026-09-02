@@ -1,12 +1,5 @@
 import { resume } from '~/data/resume'
 
-declare global {
-  interface Window {
-    __rbTrack?: (type: string, name?: string, p?: Record<string, unknown>) => void
-    ns?: Record<string, unknown>
-  }
-}
-
 /**
  * Easter eggs: the console banner + a tiny "maintenance interface" on
  * `window.ns`, and the Konami-code Role Center refresh. Finding either

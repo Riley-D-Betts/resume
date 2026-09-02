@@ -1,11 +1,43 @@
 <script setup lang="ts">
 const route = useRoute()
+const router = useRouter()
 
-const links = [
-  { to: '/ops', label: 'OVERVIEW', active: (p: string) => p === '/ops' },
-  { to: '/ops/sessions', label: 'SESSIONS', active: (p: string) => p.startsWith('/ops/sessions') },
+interface NavLink {
+  to: string
+  label: string
+  active: (p: string) => boolean
+}
+
+const prefix = (p: string) => (path: string) => path === p || path.startsWith(`${p}/`)
+
+const ALL_LINKS: NavLink[] = [
+  { to: '/ops', label: 'OVERVIEW', active: p => p === '/ops' },
+  { to: '/ops/pages', label: 'PAGES', active: prefix('/ops/pages') },
+  { to: '/ops/flows', label: 'FLOWS', active: prefix('/ops/flows') },
+  { to: '/ops/orgs', label: 'ORGS', active: prefix('/ops/orgs') },
+  { to: '/ops/visitors', label: 'VISITORS', active: prefix('/ops/visitors') },
+  { to: '/ops/sessions', label: 'SESSIONS', active: prefix('/ops/sessions') },
+  { to: '/ops/intent', label: 'INTENT', active: prefix('/ops/intent') },
+  { to: '/ops/performance', label: 'PERFORMANCE', active: prefix('/ops/performance') },
+  { to: '/ops/technology', label: 'TECHNOLOGY', active: prefix('/ops/technology') },
+  { to: '/ops/errors', label: 'ERRORS', active: prefix('/ops/errors') },
+  { to: '/ops/sql', label: 'SQL', active: prefix('/ops/sql') },
   { to: '/', label: 'VIEW SITE', active: () => false },
 ]
+
+/**
+ * Only links whose route exists get rendered (contract E.2) — a partial
+ * deploy (components without pages) never shows a link that 404s.
+ */
+const links = computed(() =>
+  ALL_LINKS.filter(l => {
+    try {
+      return router.resolve(l.to).matched.length > 0
+    } catch {
+      return false
+    }
+  }),
+)
 
 async function logout() {
   try {
@@ -22,7 +54,7 @@ async function logout() {
     <header class="ops-strip">
       <span class="ops-strip__id label">
         <StatusLamp color="teal" />
-        OPS CONSOLE // CLEARANCE: GOD KING OF BETTSUITE
+        <span class="ops-strip__id-text">OPS CONSOLE // CLEARANCE: GOD KING OF BETTSUITE</span>
       </span>
       <nav class="ops-strip__nav label" aria-label="Ops console">
         <NuxtLink
@@ -31,6 +63,7 @@ async function logout() {
           :to="l.to"
           class="ops-strip__link"
           :class="{ 'ops-strip__link--on': l.active(route.path) }"
+          :aria-current="l.active(route.path) ? 'page' : undefined"
         >
           {{ l.label }}
         </NuxtLink>
@@ -70,24 +103,42 @@ async function logout() {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
+  flex: none;
   color: var(--text-dim);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+/* The banner is the space hog (contract D14): under 1100 px only the lamp stays. */
+@media (max-width: 1100px) {
+  .ops-strip__id-text {
+    display: none;
+  }
+}
+
 .ops-strip__nav {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  flex: none;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ops-strip__nav::-webkit-scrollbar {
+  display: none;
 }
 
 .ops-strip__link {
+  flex: none;
   color: var(--text-dim);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   font-size: var(--fs-micro);
+  white-space: nowrap;
 }
 
 .ops-strip__link:hover {

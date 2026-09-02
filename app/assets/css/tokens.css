@@ -27,6 +27,33 @@
   --hairline: #1c2527;
   --hairline-lit: #2c3a3d;
 
+  /* -- data series (charts on /ops) ------------------------ */
+  /* Categorical, FIXED ORDER: slot 1 is always the first series, a slot
+     follows its entity (never re-assigned when filters change), > 6 series
+     fold into "Other". Validated against --bg-1 with
+     scripts/validate_palette.js (--mode dark --surface "#0a0e0f"). Status
+     colors (--green/--amber/--red) are never used as series colors. */
+  --series-1: #3987e5;  /* blue */
+  --series-2: #d95926;  /* orange */
+  --series-3: #199e70;  /* aqua */
+  --series-4: #c98500;  /* yellow */
+  --series-5: #d55181;  /* magenta */
+  --series-6: #9085e9;  /* violet */
+  --series-1-wash: rgba(57, 135, 229, 0.18); /* series-1 at 18% — area fills */
+  --series-prev-opacity: 0.45;               /* COMPARE: prior-period series */
+
+  /* Sequential (one teal hue, light → dark) for heatmaps / intensity. */
+  --seq-1: #a8ecf4;
+  --seq-2: #4fd3e3;
+  --seq-3: #00b4c8;
+  --seq-4: #008ea0;
+  --seq-5: #0a6c7c;
+  --seq-6: #0f4c57;
+
+  /* Chart gridlines: --hairline mixed ~60/40 into --bg-1 — one step quieter
+     than a panel hairline so the marks stay in front. */
+  --grid: #141b1d;
+
   /* -- type ------------------------------------------------ */
   --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
   --font-display: 'Archivo Black', 'Arial Black', sans-serif;

@@ -43,7 +43,7 @@ const rows = computed(() =>
 </script>
 
 <template>
-  <div data-section="positions">
+  <div data-page="positions">
     <!-- Bettsuite list pages carry no breadcrumb and no subtitle: just the
          record icon and the list name as the page heading. -->
     <div class="ns-pagetitle">
@@ -73,7 +73,7 @@ const rows = computed(() =>
       </button>
     </div>
 
-    <div class="ns-filters">
+    <div class="ns-filters" data-section="positions.filters">
       <button type="button" class="ns-filters__head" :aria-expanded="filtersOpen" @click="filtersOpen = !filtersOpen">
         <span class="ns-filters__box" aria-hidden="true">{{ filtersOpen ? '−' : '+' }}</span>
         Filters
@@ -92,7 +92,7 @@ const rows = computed(() =>
       </div>
     </div>
 
-    <div class="ns-listwrap">
+    <div class="ns-listwrap" data-section="positions.list">
       <div class="ns-listbar">
         <span class="ns-listbar__label">Style</span>
         <select class="ns-select" aria-label="Style">

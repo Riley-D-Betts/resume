@@ -75,7 +75,7 @@ function linkAttrs(l: NavLink) {
 </script>
 
 <template>
-  <nav class="ns-nav" :class="{ 'ns-nav--open': mobileOpen }" aria-label="Main Menu" @mouseleave="closeAll">
+  <nav class="ns-nav" :class="{ 'ns-nav--open': mobileOpen }" aria-label="Main Menu" data-zone="nav" @mouseleave="closeAll">
     <button type="button" class="ns-nav__burger" aria-label="Toggle menu" @click="mobileOpen = !mobileOpen">
       ☰ Menu
     </button>

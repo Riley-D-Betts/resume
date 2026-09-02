@@ -12,6 +12,17 @@ function deltaClass(k: Kpi): string {
 function arrow(k: Kpi): string {
   return k.direction === 'up' ? '▲' : k.direction === 'down' ? '▼' : '▬'
 }
+
+/** Hover-intent key `kpi:<slug>` — lowercase, `-` between words, ≤ 30 chars. */
+function kpiKey(label: string): string {
+  const slug = label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 30)
+    .replace(/-+$/, '')
+  return `kpi:${slug || 'row'}`
+}
 </script>
 
 <template>
@@ -24,7 +35,7 @@ function arrow(k: Kpi): string {
       </tr>
     </thead>
     <tbody>
-      <tr v-for="k in kpis" :key="k.label">
+      <tr v-for="k in kpis" :key="k.label" :data-track-hover="kpiKey(k.label)">
         <td class="ns-kpi__label">
           <component :is="k.to ? NsLink : 'span'" v-bind="k.to ? { to: k.to } : {}">
             <b>{{ k.label }}</b>

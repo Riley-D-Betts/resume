@@ -13,6 +13,8 @@ withDefaults(
     title: string
     flush?: boolean
     refreshable?: boolean
+    /** analytics section name (`home.kpi` …) — rendered as `data-section` */
+    section?: string
   }>(),
   { flush: false, refreshable: true },
 )
@@ -51,7 +53,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDoc))
 </script>
 
 <template>
-  <section ref="root" class="ns-portlet" :class="{ 'ns-portlet--collapsed': collapsed }">
+  <section ref="root" class="ns-portlet" :class="{ 'ns-portlet--collapsed': collapsed }" :data-section="section">
     <header class="ns-portlet__head">
       <span
         class="ns-portlet__title"

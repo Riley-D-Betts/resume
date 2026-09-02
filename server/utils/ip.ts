@@ -68,3 +68,30 @@ export function getStorageIp(event: H3Event): string {
   const ip = getClientIp(event)
   return useRuntimeConfig(event).ipAnonymize ? anonymizeIp(ip) : ip
 }
+
+/**
+ * Globally routable address? False for loopback, link-local, RFC 1918 / ULA,
+ * CGNAT and the empty string — nothing worth a reverse-DNS lookup (and
+ * nothing a PTR would ever answer for). Pure.
+ */
+export function isPublicIp(ip: string): boolean {
+  if (!ip) return false
+  if (IPV4_RE.test(ip)) {
+    const [a, b] = ip.split('.').map(Number) as [number, number, number, number]
+    if (a === 0 || a === 10 || a === 127 || a >= 224) return false
+    if (a === 169 && b === 254) return false
+    if (a === 172 && b >= 16 && b <= 31) return false
+    if (a === 192 && b === 168) return false
+    if (a === 100 && b >= 64 && b <= 127) return false // CGNAT 100.64/10
+    return true
+  }
+  if (ip.includes(':')) {
+    const s = ip.toLowerCase().split('%')[0] as string
+    if (s === '::' || s === '::1') return false
+    if (/^f[cd]/.test(s)) return false // ULA fc00::/7
+    if (/^fe[89ab]/.test(s)) return false // link-local fe80::/10
+    if (s.startsWith('::ffff:')) return isPublicIp(s.slice(7))
+    return true
+  }
+  return false
+}
