@@ -6,22 +6,31 @@ import { defineConfig, devices } from '@playwright/test'
  *   npx playwright test -c tests
  *
  * There is deliberately NO webServer block — the tests assume an already
- * running server (so they can target dev, a prod build, or Docker alike):
+ * running server (dev or a `wrangler dev` preview of the production build):
  *
  *   NUXT_ADMIN_PASSWORD=test \
  *   NUXT_SESSION_PASSWORD=$(openssl rand -hex 32) \
  *   npm run dev
  *
+ * Coverage per project: public.spec.ts runs on BOTH projects (desktop +
+ * mobile); analytics.spec.ts and ops.spec.ts are desktop-only (they skip
+ * themselves on the mobile project — one pipeline / one console is asserted
+ * once). analytics.spec.ts reads the local D1 SQLite file, so the server
+ * under test must be the local one whose state lives under .wrangler/state.
+ *
  * Environment knobs:
  * - BASE_URL      target server (default http://localhost:3000)
  * - OPS_PASSWORD  /ops password the ops spec logs in with (default 'test')
  * - D1_DB_PATH    local D1 sqlite file (default: discovered under .wrangler/state) — analytics spec
- * - PW_EXEC       when set, force the preinstalled chromium binary at
- *                 /opt/pw-browsers/chromium instead of letting Playwright
- *                 resolve a browser from PLAYWRIGHT_BROWSERS_PATH. Useful
- *                 when the installed registry revision and this playwright
- *                 version disagree; leave unset everywhere else.
+ * - PW_EXEC       absolute path to a Chromium binary to launch instead of the
+ *                 browser Playwright resolves from its registry. Useful when
+ *                 the installed registry revision and this playwright version
+ *                 disagree. `PW_EXEC=1` keeps the legacy meaning and selects
+ *                 /opt/pw-browsers/chromium (the CI image's binary). Leave it
+ *                 unset everywhere else.
  */
+const execPath = process.env.PW_EXEC === '1' ? '/opt/pw-browsers/chromium' : process.env.PW_EXEC
+
 export default defineConfig({
   testDir: './e2e',
   outputDir: '../test-results',
@@ -32,10 +41,10 @@ export default defineConfig({
   reporter: [['list']],
   use: {
     baseURL: process.env.BASE_URL || 'http://localhost:3000',
+    // A wrong selector should fail fast, not burn the whole test timeout.
+    actionTimeout: 15_000,
     screenshot: 'on',
-    ...(process.env.PW_EXEC
-      ? { launchOptions: { executablePath: '/opt/pw-browsers/chromium' } }
-      : {}),
+    ...(execPath ? { launchOptions: { executablePath: execPath } } : {}),
   },
   projects: [
     {
