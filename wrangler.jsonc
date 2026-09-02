@@ -1,5 +1,5 @@
 // Cloudflare Workers deployment config. Everything here fits the free plan:
-// Workers (100k req/day), D1 (5GB), R2 (10GB), cron triggers.
+// Workers (100k req/day), D1 (500 MB per DB on Free), R2 (10GB), cron triggers.
 //
 // One-time setup (after `npx wrangler login`):
 //   npx wrangler d1 create resume-analytics   → paste database_id below
@@ -35,15 +35,24 @@
       "bucket_name": "resume-replays"
     }
   ],
-  // Daily prune: replay/event retention + replay storage cap.
+  // Daily prune: replay/event/side-table retention, PII scrub, replay storage cap.
   "triggers": {
     "crons": ["17 9 * * *"]
   },
-  // Non-secret runtime config. NUXT_ADMIN_PASSWORD and NUXT_SESSION_PASSWORD
-  // are secrets — set them with `wrangler secret put`, never here.
+  // Non-secret runtime config (see .env.example for what each one does).
+  // NUXT_ADMIN_PASSWORD and NUXT_SESSION_PASSWORD are secrets — set them with
+  // `wrangler secret put`, never here. NUXT_TRUST_PROXY defaults to true and
+  // is irrelevant on Cloudflare (cf-connecting-ip always wins).
   "vars": {
+    "NUXT_PUBLIC_REPLAY_SAMPLE_RATE": "1",
     "NUXT_REPLAY_RETENTION_DAYS": "30",
     "NUXT_EVENT_RETENTION_DAYS": "180",
-    "NUXT_IP_ANONYMIZE": "false"
+    "NUXT_SIDE_TABLE_RETENTION_DAYS": "365",
+    "NUXT_PII_RETENTION_DAYS": "365",
+    "NUXT_SESSION_RETENTION_DAYS": "0",
+    "NUXT_IP_ANONYMIZE": "false",
+    "NUXT_HONOR_GPC": "false",
+    "NUXT_PUBLIC_HONOR_GPC": "false",
+    "NUXT_RDNS_ENABLED": "false"
   }
 }
