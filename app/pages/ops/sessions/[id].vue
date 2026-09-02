@@ -216,7 +216,7 @@ const badgeSession = computed<Record<string, unknown> | null>(
             <div v-if="!data.visitor" class="sd__empty label">NO VISITOR ROW</div>
             <template v-else>
               <Readout v-for="r in visitorFacts" :key="r.label" :readout="r" />
-              <NuxtLink :to="`/ops/visitors/${data.session.vid}`" class="sd__link label">VISITOR HISTORY &rarr;</NuxtLink>
+              <NuxtLink :to="linkTo(`/ops/visitors/${data.session.vid}`)" class="sd__link label">VISITOR HISTORY &rarr;</NuxtLink>
             </template>
           </Panel>
 

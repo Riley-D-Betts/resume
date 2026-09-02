@@ -13,7 +13,8 @@ npm-debug.log*
 .env.*
 !.env.example
 
-# Runtime data (legacy self-hosted analytics DB / replays)
+# Scratch data directory (nothing the app writes here any more — analytics
+# live in D1 and replays in R2)
 /data/
 
 # Wrangler local state (dev D1/R2 simulation)

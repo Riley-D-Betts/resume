@@ -343,9 +343,10 @@ CSP is validated there, a violation surfaces as a console error — a
 future custom range (`NO SESSIONS IN RANGE`), the seeded replay session's
 detail (event timeline, path timeline, environment panel and an rrweb
 `.rr-player` that actually mounts), Orgs → detail and Pages → detail, the
-SQL console (a comment is whitespace, `SELECT 1; SELECT 2` and `DELETE`
-are rejected with the row count unchanged, `EXPLAIN QUERY PLAN` runs, the
-schema browser lists `sessions`), the sessions CSV export (button and
+SQL console (comments are accepted and stripped before the statement runs,
+`SELECT 1; SELECT 2` and `DELETE` are rejected with the row count
+unchanged, `EXPLAIN QUERY PLAN` runs, the schema browser lists
+`sessions`), the sessions CSV export (button and
 endpoint headers) and a 401 sweep of every `/api/ops/*` route without the
 cookie. Screenshots land in `test-results/screens/`. `BASE_URL`,
 `OPS_PASSWORD`, `D1_DB_PATH` and `PW_EXEC` (path to a Chromium binary)

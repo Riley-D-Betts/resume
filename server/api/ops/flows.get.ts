@@ -8,7 +8,13 @@ import { batchAll, bindStmt, toNum, toStr } from '../../utils/opsDb'
 import { buildWhere, intParam, parseOpsQuery, parseWindow } from '../../utils/opsFilters'
 
 const SIDS_SAMPLE = 1000
-const ROWS_CAP = 5000
+const EDGE_TOP = 100
+const EXIT_TOP = 50
+/**
+ * One batch must stay under 5 000 rows in total (D1 response budget), and the
+ * edge / exit statements already claim 150 of them (R4-L2).
+ */
+const ROWS_CAP = 5000 - EDGE_TOP - EXIT_TOP
 const SEQ_TOP = 20
 
 /** Path prefixes (consecutive duplicates collapsed) of ≤ `depth` from rows ordered by (sid, entered_at). */
@@ -47,13 +53,13 @@ async function build(event: H3Event, q: OpsQuery): Promise<Flows> {
     /* 0 */ bindStmt(
       db,
       `SELECT COALESCE(pv.from_path, '(entry)') AS "from", pv.path AS "to", COUNT(*) AS n FROM page_visits pv JOIN sessions s ON s.sid = pv.sid `
-        + `WHERE ${where.sql} GROUP BY 1, 2 ORDER BY n DESC LIMIT 100`,
+        + `WHERE ${where.sql} GROUP BY 1, 2 ORDER BY n DESC LIMIT ${EDGE_TOP}`,
       where.args,
     ),
     /* 1 */ bindStmt(
       db,
       `SELECT COALESCE(NULLIF(s.exit_path, ''), s.last_path) AS "from", '(exit)' AS "to", COUNT(*) AS n FROM sessions s WHERE ${where.sql} `
-        + 'AND COALESCE(NULLIF(s.exit_path, \'\'), s.last_path) IS NOT NULL GROUP BY 1 ORDER BY n DESC LIMIT 50',
+        + `AND COALESCE(NULLIF(s.exit_path, ''), s.last_path) IS NOT NULL GROUP BY 1 ORDER BY n DESC LIMIT ${EXIT_TOP}`,
       where.args,
     ),
     /* 2 */ bindStmt(

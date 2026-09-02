@@ -33,6 +33,9 @@ export async function opsCached<T>(event: H3Event, ttlMs: number, fn: () => Prom
     return hit.value as T
   }
   const value = await fn()
+  // Re-setting an existing key keeps its ORIGINAL insertion position, so a
+  // busy-but-refreshed entry would be evicted first. Delete, then set (R4-L1).
+  store.delete(key)
   store.set(key, { exp: now + ttlMs, value })
   while (store.size > OPS_CACHE_MAX) {
     const oldest = store.keys().next().value
@@ -41,9 +44,4 @@ export async function opsCached<T>(event: H3Event, ttlMs: number, fn: () => Prom
   }
   setHeader(event, 'x-rb-cache', 'miss')
   return value
-}
-
-/** Test / debug hook. */
-export function opsCacheClear(): void {
-  store.clear()
 }

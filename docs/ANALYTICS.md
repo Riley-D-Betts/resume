@@ -539,12 +539,19 @@ nothing personal left in them.
 The admin UI at `/ops` is a client-rendered Nuxt island (`ssr: false`,
 `X-Robots-Tag: noindex`, and — because it renders untrusted rrweb DOM — a
 Content-Security-Policy that keeps everything same-origin, with `blob:`
-frames for the player) under its own dark theme, reading exclusively from
-`/api/ops/*`. Every view shares a filter bar (range 24h / 7d / 30d / all /
-custom from–to, COMPARE to the previous period, INCLUDE BOTS, org, path,
-country, device, browser, OS, returning, has-replay, webdriver, intent
-flags, free text) whose state round-trips through the URL; day / hour
-buckets are computed in **the owner's timezone** (`?tz=`), never UTC.
+frames for the player, `frame-ancestors 'none'`, `base-uri 'self'`,
+`form-action 'self'` and `object-src 'none'`) under its own dark theme,
+reading exclusively from
+`/api/ops/*`. Every view shares a filter bar (range 24h / 7d / 30d / 90d /
+all / custom from–to, COMPARE to the previous period — hidden on the views
+whose payload has no previous period, INCLUDE BOTS, org, path, country,
+device, browser, OS, returning, has-replay, webdriver, intent flags, free
+text) whose state round-trips through the URL: a query carrying any filter
+key wins outright (that is how a link clears one), an empty query keeps the
+filters already in memory, and `localStorage.rbops_filters` seeds only the
+first read of a session. Nav-strip and drill-down links carry the current
+filters, so the console keeps its context across an SPA navigation. Day /
+hour buckets are computed in **the owner's timezone** (`?tz=`), never UTC.
 
 | View | Answers |
 | --- | --- |
@@ -553,12 +560,12 @@ buckets are computed in **the owner's timezone** (`?tz=`), never UTC.
 | **Flows** | path→path edges, top 20 sequences (sampled from the newest ≤ 1 000 sessions), the funnel entered → viewed /contact → form focus → mail handoff |
 | **Organizations** + detail | "who is looking": grouped by `as_org` with an org / isp / cloud badge (`HIDE ISP/CLOUD`), sessions, visitors, returning, pages read, prints / copies / mail signals, countries, first / last seen, rDNS hosts, drill-down |
 | **Visitors** + `[vid]` | per-visitor history, recency / frequency cohorts, total active time, intent, session timeline |
-| **Sessions** + `[id]` | keyset-paged list; detail = session facts, visitor, path timeline, env panel (bot reason + honeypot UA, TZ-mismatch lamp), perf, event timeline with LOAD MORE, replay player (segments played in order) |
+| **Sessions** + `[id]` | keyset-paged list; detail = session facts, visitor, path timeline, env panel (bot reason — HONEYPOT only when a honeypot row matched, else UA / VERIFIED BOT / FLAGGED — and the TZ-mismatch lamp), perf, the first 500 events with LOAD MORE for the rest, replay player (segments played in order) |
 | **Intent** | prints, copies (email copies), selects, find-in-page, site searches, exit intents, rage / dead clicks by page and selector, form funnel by step and subject, hover keys |
-| **Performance** | p50 / p75 / p95 for TTFB, FCP, LCP, CLS, INP, DCL, load, soft-nav — overall and by device / browser / OS / country / page / protocol, computed in SQL over a ≤ 5 000-row sample; LCP series + histogram + elements, nav-phase breakdown, slowest resources, long tasks / LoAF, RTT / protocol / TLS / colo |
+| **Performance** | p50 / p75 / p95 for TTFB, FCP, LCP, CLS, INP, DCL, load, soft-nav — overall and by device / browser / OS / country / page / protocol, computed in SQL over a ≤ 5 000-row sample (no sample → `—`, never a 0 ms GOOD lamp); LCP series + histogram + elements, nav-phase breakdown, slowest resources, long tasks / LoAF, RTT / protocol / TLS / colo |
 | **Technology** | GPU, UA-CH facts, protocols, network quality, `prefers-*`, TZ-offset mismatch, webdriver — top 12 + Other |
 | **Errors** | grouped JS / resource / console errors with counts and last seen, by browser / page |
-| **SQL console** `/ops/sql` | read-only `SELECT` / `WITH` (+ `EXPLAIN QUERY PLAN`), schema browser with ≈ row counts, cookbook presets, saved queries, COPY CSV |
+| **SQL console** `/ops/sql` | read-only `SELECT` / `WITH` (+ `EXPLAIN QUERY PLAN`), schema browser with ≈ row counts, cookbook presets, saved queries, COPY CSV. Comments are stripped before the statement runs and unbalanced parentheses are refused, so nothing can escape the `SELECT * FROM (…) LIMIT ?` wrap; `pragma_*` / `dbstat` / `sqlite_dbpage` are denied like `PRAGMA` itself |
 | **Export** | CSV / NDJSON of sessions / visitors / page_visits / page_perf / events for the current filter |
 
 The nav strip lists twelve links, each gated on the route actually

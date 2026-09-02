@@ -44,10 +44,6 @@ export function pctOf(part: number, whole: number): number {
   return whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0
 }
 
-export function avgOf(sum: number, n: number): number {
-  return n > 0 ? Math.round(sum / n) : 0
-}
-
 /** `json_group_array(DISTINCT …)` text → strings without NULLs / blanks. */
 export function jsonStrings(v: unknown, cap = 10): string[] {
   if (typeof v !== 'string') return []

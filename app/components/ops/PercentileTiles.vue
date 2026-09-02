@@ -47,8 +47,10 @@ const view = computed(() =>
     const d = DEFAULTS[t.metric]
     const unit = t.unit ?? d?.unit ?? 'ms'
     const thresholds = t.thresholds === undefined ? (d?.thresholds ?? null) : t.thresholds
+    // n = 0 is NO SAMPLE, not a fast page: no number, no rating lamp (R4-M1).
+    const empty = t.n === 0
     let rating: Rating = null
-    if (thresholds && t.p75 !== null && Number.isFinite(t.p75)) {
+    if (thresholds && !empty && t.p75 !== null && Number.isFinite(t.p75)) {
       rating =
         t.p75 <= thresholds[0]
           ? { word: 'GOOD', lamp: 'green' }
@@ -62,9 +64,9 @@ const view = computed(() =>
       unit,
       rating,
       thresholdText: thresholds ? `GOOD ≤ ${fv(thresholds[0], unit)} · POOR > ${fv(thresholds[1], unit)}` : 'NO THRESHOLD',
-      p50t: fv(t.p50, unit),
-      p75t: fv(t.p75, unit),
-      p95t: fv(t.p95, unit),
+      p50t: empty ? '—' : fv(t.p50, unit),
+      p75t: empty ? '—' : fv(t.p75, unit),
+      p95t: empty ? '—' : fv(t.p95, unit),
     }
   }),
 )

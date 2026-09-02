@@ -1,14 +1,19 @@
 // server/utils/sqlGuard.ts — read-only guard for the /ops SQL console
 // (contract D.3, decisions D5 / D6 / D17). A single-pass lexer, not a regex:
-// comments are whitespace (SQLite treats them so — `DE/**/LETE` is two
-// tokens and a syntax error downstream), quoted / bracketed / backticked
+// comments are STRIPPED to one space before anything downstream sees the
+// statement (SQLite treats them as whitespace — `DE/**/LETE` is two tokens
+// and a syntax error downstream), quoted / bracketed / backticked
 // identifiers are normalised and recorded, bytes ≥ 0x80 are identifier
 // characters, `;` and bind placeholders are rejected outright, the statement
 // must start with SELECT or WITH (optionally `EXPLAIN QUERY PLAN`), every
 // bare token is checked against the denylist and every identifier against
 // the forbidden names. The accepted statement is wrapped in
 // `SELECT * FROM (…) AS rb_q LIMIT ?` — DML inside FROM (…) is a syntax
-// error, so the wrap is a second, independent fence. PURE.
+// error, so the wrap is a second, independent fence. The wrap only ever sees
+// the COMMENT-FREE text: an unterminated `/*` used to swallow the appended
+// ` ) AS rb_q LIMIT ?`, and a trailing `-- x` used to leak into the column
+// name of an unaliased expression. Parenthesis depth is checked too, so
+// `SELECT … ) AS x` cannot break out of the wrap. PURE.
 
 export const DENIED_TOKENS: ReadonlySet<string> = new Set([
   'INSERT',
@@ -41,14 +46,14 @@ export const MAX_SQL_CHARS = 8192
 export const DEFAULT_LIMIT = 200
 export const MAX_LIMIT = 1000
 
-export type GuardCode = 'empty' | 'toolong' | 'semicolon' | 'placeholder' | 'unterminated' | 'shape' | 'denied' | 'forbidden'
+export type GuardCode = 'empty' | 'toolong' | 'semicolon' | 'placeholder' | 'unterminated' | 'unbalanced' | 'shape' | 'denied' | 'forbidden'
 
 export interface GuardOk {
   ok: true
   /** What to prepare: the wrapped SELECT (bind `limit + 1`) or the bare EXPLAIN (no bind). */
   sql: string
   explain: boolean
-  /** The statement as accepted (trimmed, one trailing `;` stripped). */
+  /** The statement as accepted (comments stripped, trimmed, one trailing `;` stripped). */
   source: string
   /** Every identifier seen, uppercased (bare and quoted) — for diagnostics / tests. */
   identifiers: string[]
@@ -91,11 +96,27 @@ function fail(code: GuardCode, reason: string): GuardFail {
   return { ok: false, code, reason }
 }
 
-/** Lex `sql` into tokens; comments are dropped, literals are skipped, identifiers are normalised. */
-export function lexSql(sql: string): Token[] | GuardFail {
+interface Lexed {
+  tokens: Token[]
+  /** `sql` with every comment replaced by one space — what actually runs. */
+  clean: string
+}
+
+/**
+ * Lex `sql` into tokens and the comment-free text; literals are skipped,
+ * identifiers are normalised, parenthesis depth may never go negative.
+ */
+export function lexAll(sql: string): Lexed | GuardFail {
   const tokens: Token[] = []
   const n = sql.length
   let i = 0
+  let out = ''
+  let kept = 0
+  let depth = 0
+  const keep = (to: number) => {
+    out += sql.slice(kept, to)
+    kept = to
+  }
   while (i < n) {
     const ch = sql[i] as string
     const next = sql[i + 1]
@@ -103,16 +124,22 @@ export function lexSql(sql: string): Token[] | GuardFail {
       i++
       continue
     }
-    // comments = whitespace
+    // comments are replaced by one space, so nothing downstream sees them
     if (ch === '-' && next === '-') {
+      keep(i)
       i += 2
       while (i < n && sql[i] !== '\n') i++
+      out += ' '
+      kept = i
       continue
     }
     if (ch === '/' && next === '*') {
+      keep(i)
       i += 2
       while (i < n && !(sql[i] === '*' && sql[i + 1] === '/')) i++
-      i += 2 // an unterminated block comment runs to EOF — SQLite accepts that
+      i = Math.min(n, i + 2) // an unterminated block comment runs to EOF
+      out += ' '
+      kept = i
       continue
     }
     // string literal — never inspected
@@ -172,14 +199,36 @@ export function lexSql(sql: string): Token[] | GuardFail {
       i = j
       continue
     }
+    if (ch === '(') depth++
+    if (ch === ')' && --depth < 0) return fail('unbalanced', 'unbalanced parenthesis — `)` without a matching `(`')
     tokens.push({ kind: 'other', text: ch })
     i++
   }
-  return tokens
+  if (depth !== 0) return fail('unbalanced', 'unbalanced parenthesis — `(` without a matching `)`')
+  keep(n)
+  return { tokens, clean: out }
 }
 
+/** Tokens only — kept for the unit tests and diagnostics. */
+export function lexSql(sql: string): Token[] | GuardFail {
+  const r = lexAll(sql)
+  return 'ok' in r ? r : r.tokens
+}
+
+/**
+ * `pragma_table_info(…)` & friends are table-valued functions: the bare
+ * `PRAGMA` denylist entry never sees them, so the whole `PRAGMA_` family is
+ * denied by prefix. `dbstat` / `sqlite_dbpage` expose raw pages the same way.
+ */
 function isForbiddenIdentifier(name: string): boolean {
-  return name === 'D1_MIGRATIONS' || name.startsWith('_CF_')
+  return (
+    name === 'D1_MIGRATIONS'
+    || name.startsWith('_CF_')
+    || name.startsWith('PRAGMA_')
+    || name === 'DBSTAT'
+    || name === 'SQLITE_DBSTAT'
+    || name === 'SQLITE_DBPAGE'
+  )
 }
 
 /** Wrap an accepted statement so D1 caps the rows (bind `limit + 1`). */
@@ -194,13 +243,16 @@ export function wrapLimit(source: string): string {
 export function guardReadOnly(input: string): GuardResult {
   if (typeof input !== 'string') return fail('empty', 'sql must be a string')
   if (input.length > MAX_SQL_CHARS) return fail('toolong', `statement longer than ${MAX_SQL_CHARS} characters`)
-  const source = input.trim().replace(/;\s*$/, '').trim()
-  if (source.length === 0) return fail('empty', 'empty statement')
+  const trimmed = input.trim().replace(/;\s*$/, '').trim()
+  if (trimmed.length === 0) return fail('empty', 'empty statement')
 
-  const lexed = lexSql(source)
-  if (!Array.isArray(lexed)) return lexed
-  const tokens = lexed
+  const lexed = lexAll(trimmed)
+  if ('ok' in lexed) return lexed
+  const { tokens } = lexed
   if (tokens.length === 0) return fail('empty', 'empty statement')
+  // What runs is the comment-free text — never the operator's raw input.
+  const source = lexed.clean.trim().replace(/;\s*$/, '').trim()
+  if (source.length === 0) return fail('empty', 'empty statement')
 
   // shape
   let at = 0

@@ -9,16 +9,17 @@ import { ownerTz } from './useOpsFormat'
 /**
  * The one filter state every /ops view shares (contract E.3).
  *
- * - Synced both ways with `route.query` via `router.replace`, so every view is
- *   a shareable URL. THE URL WINS whenever any filter key is present;
- *   `localStorage.rbops_filters` (range / from / to / compare / bots) only
- *   seeds an EMPTY query.
+ * - Synced both ways with `router.currentRoute` via `router.replace`, so every
+ *   view is a shareable URL. THE URL WINS whenever any filter key is present;
+ *   an EMPTY query keeps whatever is already in memory, and
+ *   `localStorage.rbops_filters` (range / from / to / compare / bots) seeds
+ *   only the first read of the session.
  * - `query` is what pages hand to `useOpsFetch` — the filters plus the
  *   owner's `tz`, so day/hour buckets land in the right zone (audit A4).
  * - `linkTo(page, extra)` builds drill-down links that carry the filters.
  */
 
-export const OPS_RANGES = ['24h', '7d', '30d', 'all', 'custom'] as const
+export const OPS_RANGES = ['24h', '7d', '30d', '90d', 'all', 'custom'] as const
 const ALL_RANGES: readonly OpsRange[] = ['24h', '7d', '30d', '90d', 'all', 'custom']
 export const DEFAULT_RANGE: OpsRange = '7d'
 
@@ -226,18 +227,40 @@ function buildQs(q: Record<string, string>): string {
 
 /** One detached sync scope for the whole console (client only). */
 let syncScope: EffectScope | null = null
+/** Set once the URL has been read; after that an EMPTY query keeps the state. */
+let primed = false
 
 export function useOpsFilters() {
   const state = useState<OpsFilterState>('rbops-filters', defaultFilters)
-  const route = useRoute()
   const router = useRouter()
   const tz = ownerTz()
 
+  /**
+   * The LIVE route — deliberately NOT `useRoute()`.
+   *
+   * Inside `<NuxtPage>` Nuxt injects a per-page-instance route snapshot, and
+   * that snapshot stops advancing as soon as its page unmounts. The sync
+   * watchers below live in ONE detached scope created by whichever view
+   * mounted first, so reading `useRoute()` there froze the console on that
+   * view's URL: every SPA drill-down (`/ops/orgs` → `/ops/orgs/detail?org=…`)
+   * was invisible to the filter state, while the same URL opened directly
+   * worked. `router.currentRoute` is the one object that always mirrors the
+   * address bar.
+   */
+  const live = () => router.currentRoute.value
+
+  /**
+   * URL → state. A query carrying ANY filter key wins outright (that is how a
+   * link CLEARS a filter). An empty query keeps the filters already in memory
+   * — only the very first read of the session falls back to the stored seed.
+   */
   function applyFromRoute(): void {
-    const q = route.query
+    const q = live().query
     const next = defaultFilters()
     if (hasFilterKeys(q)) Object.assign(next, parseFilters(q as Record<string, unknown>))
+    else if (primed) Object.assign(next, state.value)
     else Object.assign(next, loadSeed())
+    primed = true
     if (next.range === 'custom' && !next.from && !next.to) next.range = DEFAULT_RANGE
     if (!sameQuery(serializeFilters(state.value), serializeFilters(next))) state.value = next
   }
@@ -247,10 +270,10 @@ export function useOpsFilters() {
     syncScope.run(() => {
       // URL → state (initial load, back/forward, drill-down links, nav strip).
       watch(
-        () => route.fullPath,
+        () => live().fullPath,
         () => {
-          if (!route.path.startsWith('/ops')) return
-          if (sameQuery(filterPart(route.query), serializeFilters(state.value))) return
+          if (!live().path.startsWith('/ops')) return
+          if (sameQuery(filterPart(live().query), serializeFilters(state.value))) return
           applyFromRoute()
         },
         { immediate: true },
@@ -260,9 +283,10 @@ export function useOpsFilters() {
         () => serializeFilters(state.value),
         ser => {
           saveSeed(state.value)
-          if (!route.path.startsWith('/ops') || route.path === '/ops/login') return
-          if (sameQuery(filterPart(route.query), ser)) return
-          router.replace({ path: route.path, query: { ...restPart(route.query), ...ser } }).catch(() => {})
+          const r = live()
+          if (!r.path.startsWith('/ops') || r.path === '/ops/login') return
+          if (sameQuery(filterPart(r.query), ser)) return
+          router.replace({ path: r.path, query: { ...restPart(r.query), ...ser } }).catch(() => {})
         },
         { deep: true },
       )
@@ -318,6 +342,11 @@ export function useOpsFilters() {
   /**
    * `/ops/sessions?org=Acme&range=30d` — the current filters plus `extra`
    * (a null / '' value in `extra` removes that key).
+   *
+   * The query is never empty: `range` is written out even at its default so
+   * that "back to the list" links (`linkTo('/ops/orgs', { org: null })`) still
+   * count as a filter-bearing URL and therefore CLEAR the key they dropped.
+   * The state → URL watcher trims the redundant `range` right after.
    */
   function linkTo(page: string, extra: Partial<Record<string, string | number | null | undefined>> = {}): string {
     const q: Record<string, string> = { ...serializeFilters(state.value) }
@@ -325,6 +354,7 @@ export function useOpsFilters() {
       if (v === null || v === undefined || v === '') delete q[k]
       else q[k] = String(v)
     }
+    if (Object.keys(q).length === 0) q.range = state.value.range
     return `${page}${buildQs(q)}`
   }
 

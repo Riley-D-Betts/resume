@@ -19,7 +19,16 @@ const SORTS: Record<string, string> = {
  */
 export default defineEventHandler(async (event): Promise<SessionsPage> => {
   await requireAdmin(event)
-  const q = parseOpsQuery(getQuery(event) as Record<string, unknown>)
+  const raw = getQuery(event) as Record<string, unknown>
+  const q = parseOpsQuery(raw)
+  // A half-cursor is silently dropped by the parser and would hand LOAD MORE
+  // page 1 again, forever — say 400 instead (R4-L11).
+  if (raw.before !== undefined || raw.beforeSid !== undefined) {
+    const n = Number(q.before)
+    if (!Number.isFinite(n) || typeof q.beforeSid !== 'string') {
+      throw createError({ statusCode: 400, statusMessage: 'invalid cursor: before (number) + beforeSid (id) are required together' })
+    }
+  }
   const w = parseWindow(q)
   const db = getDb(event)
   const where = buildWhere(q, w)

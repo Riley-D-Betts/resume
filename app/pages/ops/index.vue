@@ -70,6 +70,12 @@ const lineSeries = computed<LineSeries[]>(() => {
   ]
 })
 
+/** Every point at zero is NO DATA, not a flat line along the axis (R4-L14). */
+const seriesEmpty = computed(() => {
+  const s = overview.value?.series ?? []
+  return s.length === 0 || s.every(p => p.sessions === 0 && p.pageviews === 0 && p.visitors === 0)
+})
+
 /** COMPARE dashes only the primary series (contract E.4). */
 const linePrev = computed<LineSeries[]>(() => {
   const ps = compare.value ? (overview.value?.prevSeries ?? []) : []
@@ -84,12 +90,14 @@ const orgRows = computed<BarRow[]>(() =>
     n: o.n,
     display: o.kind === 'org' ? fmt.num(o.n) : `${fmt.num(o.n)} · ${o.kind.toUpperCase()}`,
     title: `${o.k} · ${o.kind.toUpperCase()} · ${fmt.num(o.n)} sessions`,
-    to: linkTo('/ops/orgs/detail', { org: o.k }),
+    // '(unknown)' / '??' are placeholders, not filter values (R4-M9).
+    to: o.k.startsWith('(') ? undefined : linkTo('/ops/orgs/detail', { org: o.k }),
   })),
 )
 
+/** Only a real path links / filters — `(unknown)` and `??` stay plain text (R4-M9). */
 function pathRows(list: { k: string; n: number }[] | undefined): BarRow[] {
-  return (list ?? []).map(p => ({ k: p.k, n: p.n, to: linkTo('/ops/pages/detail', { path: p.k }) }))
+  return (list ?? []).map(p => ({ k: p.k, n: p.n, to: p.k.startsWith('/') ? linkTo('/ops/pages/detail', { path: p.k }) : undefined }))
 }
 
 const pageRows = computed(() => pathRows(overview.value?.topPages))
@@ -120,7 +128,7 @@ const segmentColumns: DataColumn[] = [
   { key: 'dim', label: 'DIM', format: v => String(v).replace('referrerHost', 'referrer').toUpperCase() },
   { key: 'key', label: 'KEY', ellipsis: true },
   { key: 'sessions', label: 'SESSIONS' },
-  { key: 'engagedPct', label: 'ENGAGED %', format: v => fmt.pct(v, 1), title: '≥ 2 pages or ≥ 30 s active' },
+  { key: 'engagedPct', label: 'ENGAGED %', format: v => fmt.pct(v, 1), title: '≥ 2 pages, or ≥ 60 s active, or a mail handoff / mailto click' },
   { key: 'avgActiveMs', label: 'AVG ACTIVE', format: v => fmt.mmss(v), numeric: true },
   { key: 'contactPct', label: 'CONTACT %', format: v => fmt.pct(v, 1), title: 'mail handoff or mailto click' },
 ]
@@ -253,7 +261,7 @@ const storage = computed<StatusReadout[]>(() => {
           label="BOUNCE %"
           :value="fmt.pct(overview.stats.bounceRate, 1)"
           :delta="d(overview.stats.bounceRate, overview.prev?.bounceRate)"
-          hint="single-page sessions under 10 s active"
+          hint="single-page sessions with under 15 s active"
         />
         <StatCard
           label="MAIL HANDOFFS"
@@ -292,12 +300,13 @@ const storage = computed<StatusReadout[]>(() => {
 
       <!-- per-day series -->
       <Panel :title="`SESSIONS // ${rangeWord}`" class="ov__block">
-        <Sparkline :data="overview.series" :aria-label="`Sessions per day, ${rangeWord.toLowerCase()}`" />
+        <div v-if="seriesEmpty" class="ov__empty label">NO DATA // SESSIONS</div>
+        <Sparkline v-else :data="overview.series" :aria-label="`Sessions per day, ${rangeWord.toLowerCase()}`" />
       </Panel>
 
       <div class="ov__grid">
         <Panel title="SESSIONS · PAGEVIEWS · VISITORS // PER DAY" class="ov__wide">
-          <div v-if="overview.series.length === 0" class="ov__empty label">NO DATA // OVERVIEW</div>
+          <div v-if="seriesEmpty" class="ov__empty label">NO DATA // OVERVIEW</div>
           <LineChart
             v-else
             :series="lineSeries"
@@ -410,7 +419,7 @@ const storage = computed<StatusReadout[]>(() => {
             :lamp="overview.errors.total > 0 ? 'red' : 'off'"
             :pulse="false"
             sub="JS · RESOURCE · CONSOLE"
-            hint="error events in range (the count, not the list length)"
+            hint="errors counted at ingest (session counters; the ERRORS page samples events)"
             testid="intent-card"
             :to="linkTo('/ops/errors')"
           />
@@ -434,7 +443,7 @@ const storage = computed<StatusReadout[]>(() => {
           <NuxtLink
             v-for="s in overview.recent"
             :key="s.sid"
-            :to="`/ops/sessions/${s.sid}`"
+            :to="linkTo(`/ops/sessions/${s.sid}`)"
             class="ov__recent"
           >
             <span class="ov__recent-t">{{ fmt.dateTime(s.startedAt) }}</span>

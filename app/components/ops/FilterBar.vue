@@ -194,7 +194,7 @@ onBeforeUnmount(() => {
         class="fb__chip label"
         :class="{ 'fb__chip--on': state.returning !== '' }"
         data-testid="filter-returning"
-        title="visitors with more than one visit"
+        title="VISITORS: visit_count &gt; 1 · every other view: the session's is_returning flag"
         @click="cycleTri('returning')"
       >
         RETURNING // {{ triWord(state.returning) }}

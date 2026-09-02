@@ -743,9 +743,10 @@ export interface Intent {
 export type PerfMetric = 'ttfb' | 'fcp' | 'lcp' | 'cls' | 'inp' | 'dcl' | 'load' | 'softNav'
 
 export interface Percentiles {
-  p50: number
-  p75: number
-  p95: number
+  /** `null` when the partition is empty (`n = 0`) — never a fake 0 (R4-M1). */
+  p50: number | null
+  p75: number | null
+  p95: number | null
   n: number
 }
 
@@ -758,7 +759,8 @@ export interface Performance {
   /** SAMPLE n / N — the ≤ 5 000 newest page_perf rows in range. */
   sampled: { n: number; total: number }
   lcpSeries: { day: string; p75: number; n: number }[]
-  hist: { metric: PerfMetric; bins: { from: number; to: number; n: number }[] }[]
+  /** `overflow` marks the last, open-ended bin (everything at or above `from`). */
+  hist: { metric: PerfMetric; bins: { from: number; to: number; n: number; overflow?: boolean }[] }[]
   navBreakdown: { phase: string; p50: number }[]
   lcpElements: { sel: string; n: number; p75: number }[]
   resources: {
@@ -869,7 +871,8 @@ export interface SessionsPage {
   next: SessionsCursor | null
 }
 
-export type BotReason = 'ua' | 'honeypot' | 'verified' | null
+/** `flagged` = the session carries is_bot with no honeypot row and no bot UA (R4-L13). */
+export type BotReason = 'ua' | 'honeypot' | 'verified' | 'flagged' | null
 
 export interface SessionDetail {
   session: SessionFull

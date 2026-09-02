@@ -107,13 +107,24 @@ async function run() {
       }
       if (!cd) cd = res.headers.get('content-disposition') ?? ''
       const lines = splitLines(await res.text())
+      // The CSV header line is emitted on the FIRST page only (no `after`),
+      // so a continuation page must keep ALL of its lines — slicing every
+      // page dropped one row per page (R4-H1).
       let pageRows: string[]
-      if (props.format === 'csv') {
-        if (header === null) header = lines[0] ?? ''
+      if (props.format === 'csv' && !after) {
+        header = lines[0] ?? ''
         pageRows = lines.slice(1)
       } else pageRows = lines
-      const declared = Number(res.headers.get('x-rb-rows') ?? '')
-      const n = Number.isFinite(declared) && declared >= 0 && res.headers.has('x-rb-rows') ? declared : pageRows.length
+      const declaredRaw = res.headers.get('x-rb-rows')
+      const declared = declaredRaw === null ? Number.NaN : Number(declaredRaw)
+      const hasDeclared = Number.isFinite(declared) && declared >= 0
+      // The server counts the rows it wrote; the only way the line count can
+      // disagree is a cell holding a raw newline (quoted, so the bytes still
+      // round-trip). Say so instead of silently reporting the wrong total.
+      if (hasDeclared && declared !== pageRows.length) {
+        console.warn('[ops-export] page lines', pageRows.length, '≠ x-rb-rows', declared)
+      }
+      const n = hasDeclared ? declared : pageRows.length
       const room = props.cap - rows.value
       if (pageRows.length > room) {
         body.push(...pageRows.slice(0, room))
@@ -122,7 +133,7 @@ async function run() {
         break
       }
       body.push(...pageRows)
-      rows.value += Math.min(n, pageRows.length) || pageRows.length
+      rows.value += n
       if (rows.value >= props.cap) {
         rows.value = props.cap
         capped = true

@@ -427,11 +427,27 @@ export function sessionProjection(a = 's', full = false): string {
   return cols.join(', ')
 }
 
-/** Referrer host, extracted in SQL (B11 / A49): scheme stripped, cut at the first `/`, '(direct)' when empty. */
+/**
+ * Referrer host, extracted in SQL (B11 / A49, R4-L5): lowercased, `mailto:`
+ * folded to one `mailto` bucket, scheme stripped, cut at the first `/` then
+ * the first `?`, userinfo before `@` dropped, a leading `www.` removed,
+ * '(direct)' when empty — so `https://WWW.Example.com/x?y` and
+ * `http://example.com` land in the same row.
+ *
+ * Each stage is a one-row subquery that names its input, instead of a nest of
+ * CASEs that would repeat the column expression 3^5 times.
+ */
 export function referrerHostSql(col: string): string {
-  const raw = `COALESCE(NULLIF(${col}, ''), '(direct)')`
-  const x = `CASE WHEN instr(${raw}, '://') > 0 THEN substr(${raw}, instr(${raw}, '://') + 3) ELSE ${raw} END`
-  return `lower(CASE WHEN instr(${x}, '/') > 0 THEN substr(${x}, 1, instr(${x}, '/') - 1) ELSE ${x} END)`
+  const cutAt = (v: string, ch: string) => `CASE WHEN instr(${v}, '${ch}') > 0 THEN substr(${v}, 1, instr(${v}, '${ch}') - 1) ELSE ${v} END`
+  const afterAt = `CASE WHEN instr(q, '@') > 0 THEN substr(q, instr(q, '@') + 1) ELSE q END`
+  return (
+    "(SELECT CASE WHEN h LIKE 'www.%' THEN substr(h, 5) ELSE h END FROM ("
+    + `SELECT ${afterAt} AS h FROM (`
+    + `SELECT ${cutAt('a', '?')} AS q FROM (`
+    + `SELECT ${cutAt('sc', '/')} AS a FROM (`
+    + "SELECT CASE WHEN lo LIKE 'mailto:%' THEN 'mailto' WHEN instr(lo, '://') > 0 THEN substr(lo, instr(lo, '://') + 3) ELSE lo END AS sc FROM ("
+    + `SELECT lower(COALESCE(NULLIF(${col}, ''), '(direct)')) AS lo))))))`
+  )
 }
 
 /** First tag of an Accept-Language header, lowercased, `;q=` stripped ('??' when absent). */

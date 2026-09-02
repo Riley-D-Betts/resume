@@ -38,7 +38,7 @@ const columns = computed<DataColumn[]>(() => {
     { key: 'entries', label: 'ENTRIES' },
     { key: 'exits', label: 'EXITS' },
     { key: 'avgActiveMs', label: 'AVG ACTIVE', format: v => fmt.mmss(v), numeric: true },
-    { key: 'p50ActiveMs', label: 'P50 ACTIVE', format: v => fmt.mmss(v), numeric: true },
+    { key: 'p50ActiveMs', label: 'P50 ACTIVE', format: v => fmt.mmss(v), numeric: true, title: 'median active time — sampled from the newest 5 000 page visits in range' },
     { key: 'avgScrollPct', label: 'SCROLL %', format: v => fmt.pct(v, 0) },
     { key: 'bounceRate', label: 'BOUNCE %', format: v => fmt.pct(v, 1), title: 'bounced sessions entering here ÷ sessions entering here' },
     { key: 'errors', label: 'ERRORS' },

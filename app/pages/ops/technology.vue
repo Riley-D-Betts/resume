@@ -65,7 +65,7 @@ const isEmpty = computed(() => Boolean(data.value) && (data.value?.sampled.total
 
 <template>
   <div class="te">
-    <FilterBar />
+    <FilterBar :show-compare="false" />
 
     <p v-if="error" class="te__fault">{{ opsFault(error, 'technology') }}</p>
     <p v-else-if="!data && status === 'pending'" class="te__poll label">... POLLING</p>

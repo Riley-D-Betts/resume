@@ -121,7 +121,7 @@ function orgTo(row: Row): string | null {
 
 <template>
   <div class="sx">
-    <FilterBar />
+    <FilterBar :show-compare="false" />
 
     <p v-if="error" class="sx__fault">{{ opsFault(error, 'sessions') }}</p>
 
@@ -141,7 +141,7 @@ function orgTo(row: Row): string | null {
         row-testid="session-row"
         :sort="sort"
         server-sort
-        :row-to="(r: Row) => `/ops/sessions/${String(r.sid)}`"
+        :row-to="(r: Row) => linkTo(`/ops/sessions/${String(r.sid)}`)"
         :empty="loading ? '... POLLING' : 'NO SESSIONS IN RANGE'"
         dense
         @sort="onSort"

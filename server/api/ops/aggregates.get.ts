@@ -10,6 +10,8 @@ import { ENGAGED_SQL, acceptLanguageFirstSql, activeSql, buildWhere, parseOpsQue
 import { TZ_HOUR_MS } from '../../utils/opsTz'
 
 const SAMPLE = 5000
+/** Per-row cap on section dwell before it is averaged (6 h) — C3. */
+const DWELL_CAP_MS = 21_600_000
 const DIMS = ['referrers', 'countries', 'cities', 'devices', 'browsers', 'languages', 'os', 'orgs', 'entryPaths', 'exitPaths', 'languagesRanked'] as const
 const SEGMENT_DIMS: readonly SegmentDim[] = ['device', 'browser', 'country', 'referrerHost']
 
@@ -77,7 +79,9 @@ async function build(event: H3Event, q: OpsQuery): Promise<Aggregates> {
     /* 1 */ bindStmt(db, `${base} ${segmentsSql}`, where.args),
     /* 2 */ bindStmt(
       db,
-      `SELECT e.name AS section, CAST(ROUND(COALESCE(AVG(CAST(json_extract(e.payload, '$.dwellMs') AS REAL)), 0)) AS INTEGER) AS avgMs, COUNT(*) AS n `
+      // Per-row dwell is clamped to 6 h before the AVG: one tab left open all
+      // weekend must not float a section to the top of the table (C3).
+      `SELECT e.name AS section, CAST(ROUND(COALESCE(AVG(MIN(CAST(json_extract(e.payload, '$.dwellMs') AS REAL), ${DWELL_CAP_MS})), 0)) AS INTEGER) AS avgMs, COUNT(*) AS n `
         + `FROM events e JOIN sessions s ON s.sid = e.sid WHERE e.type = 'section_exit' AND e.name IS NOT NULL AND e.ts >= ? AND ${where.sql} `
         + 'GROUP BY e.name ORDER BY avgMs DESC LIMIT 50',
       [tsFloor, ...where.args],
