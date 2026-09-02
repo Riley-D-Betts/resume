@@ -77,6 +77,10 @@ export function opsFault(err: OpsFetchError | null | undefined, what: string): s
   return `LINK FAULT // ${code}${what.toUpperCase()} UNAVAILABLE`
 }
 
+// Nitro augments $fetch with per-route types; matching a plain string URL against every
+// route recurses past the compiler's depth limit, so call it through a plain signature.
+const plainFetch = $fetch as unknown as (url: string, opts?: Record<string, unknown>) => Promise<unknown>
+
 function toError(err: unknown): OpsFetchError {
   return { statusCode: errorStatus(err), message: errorText(err) }
 }
@@ -92,7 +96,7 @@ export async function opsFetch<T>(
 ): Promise<T> {
   try {
     // `url` is a plain string, so ofetch's per-route typing does not apply.
-    return (await $fetch(url, {
+    return (await plainFetch(url, {
       method: opts.method ?? 'GET',
       query: opts.query,
       body: opts.body as Record<string, unknown> | undefined,
@@ -128,7 +132,7 @@ export function useOpsFetch<T>(url: MaybeRefOrGetter<string>, opts: OpsFetchOpti
     status.value = 'pending'
     try {
       const target: string = toValue(url)
-      const raw: unknown = await $fetch(target, {
+      const raw: unknown = await plainFetch(target, {
         method: opts.method ?? 'GET',
         query: toValue(opts.query),
         body: toValue(opts.body) as Record<string, unknown> | undefined,

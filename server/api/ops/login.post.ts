@@ -40,7 +40,7 @@ interface AttemptRow {
 export default defineEventHandler(async (event) => {
   const ip = getClientIp(event)
   if (!rateLimit('ops-login', ip, 5, 60_000)) {
-    setHeader(event, 'Retry-After', '60')
+    setHeader(event, 'Retry-After', 60)
     throw createError({ statusCode: 429, statusMessage: 'too many attempts' })
   }
 
@@ -66,7 +66,7 @@ export default defineEventHandler(async (event) => {
   }
   if (row && Number(row.locked_until) > now) {
     const retry = Math.max(1, Math.ceil((Number(row.locked_until) - now) / 1000))
-    setHeader(event, 'Retry-After', String(retry))
+    setHeader(event, 'Retry-After', retry)
     console.warn('[ops-login] locked', { ip: key, retryAfterS: retry })
     throw createError({ statusCode: 429, statusMessage: 'locked — try again later' })
   }
