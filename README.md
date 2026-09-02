@@ -69,7 +69,7 @@ One-time setup:
 
 ```sh
 npx wrangler login
-npx wrangler d1 create resume-analytics    # paste database_id into wrangler.jsonc
+npx wrangler d1 create resume-analytics    # only if the database does not exist yet
 npx wrangler r2 bucket create resume-replays
 npm run db:migrate:remote                  # apply the schema to the real D1
 npx wrangler secret put NUXT_ADMIN_PASSWORD
