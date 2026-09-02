@@ -39,14 +39,14 @@ const rows = computed(() =>
 </script>
 
 <template>
-  <div data-section="projects">
+  <div data-page="projects">
 
     <NsPageTitle
       title="Projects"
       subtitle="Side builds — hardware for the kids, software for the plant and beyond."
     />
 
-    <div class="ns-buttonbar">
+    <div class="ns-buttonbar" data-zone="record-actions">
         <button
           type="button"
           class="ns-btn ns-btn--primary"
@@ -57,12 +57,12 @@ const rows = computed(() =>
         <button type="button" class="ns-btn" @click="toast.show('View customization is disabled on this account.')">
           Customize View
         </button>
-        <a href="https://github.com/Riley-D-Betts" target="_blank" rel="noopener" class="ns-btn">GitHub</a>
+        <a href="https://github.com/Riley-D-Betts" target="_blank" rel="noopener" class="ns-btn" data-track-hover="github">GitHub</a>
       <span class="ns-buttonbar__spacer" />
       <span class="ns-buttonbar__note">{{ allRows.length }} record(s)</span>
     </div>
 
-    <div class="ns-listwrap">
+    <div class="ns-listwrap" data-section="projects.list">
       <div class="ns-listbar">
         <span class="ns-listbar__label">View</span>
         <select class="ns-select" aria-label="View">

@@ -47,7 +47,7 @@ export function useSearchIndex(): SearchHit[] {
     type: 'Script',
     name: 'How This Site Was Built',
     to: '/colophon',
-    terms: 'colophon stack nuxt vue typescript sqlite docker customization scripting source',
+    terms: 'colophon stack nuxt vue typescript cloudflare workers d1 r2 customization scripting source',
   })
 
   return hits

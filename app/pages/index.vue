@@ -35,7 +35,7 @@ const locked = () => toast.show('This dashboard is Locked — content and layout
 </script>
 
 <template>
-  <div data-section="home">
+  <div data-page="home">
     <div class="ns-dashbar">
       <span class="ns-dashbar__spacer ns-dashbar__greet">
         <b>{{ d.greeting }}</b> — {{ account.edition }} · {{ account.roleLabel }}
@@ -52,7 +52,7 @@ const locked = () => toast.show('This dashboard is Locked — content and layout
     <div class="ns-dash">
       <!-- Narrow left column -->
       <div class="ns-dash__col">
-        <NsPortlet title="Reminders">
+        <NsPortlet title="Reminders" section="home.reminders">
           <ul class="ns-remind">
             <component
               :is="r.to ? NsLink : 'div'"
@@ -70,7 +70,7 @@ const locked = () => toast.show('This dashboard is Locked — content and layout
           </template>
         </NsPortlet>
 
-        <NsPortlet title="Settings" :refreshable="false">
+        <NsPortlet title="Settings" :refreshable="false" section="home.settings">
           <ul class="ns-links">
             <button type="button" class="ns-links__item" style="text-align: left; width: 100%" @click="locked">
               Personalize Dashboard
@@ -81,7 +81,7 @@ const locked = () => toast.show('This dashboard is Locked — content and layout
           </ul>
         </NsPortlet>
 
-        <NsPortlet title="Shortcuts" :refreshable="false">
+        <NsPortlet title="Shortcuts" :refreshable="false" section="home.shortcuts">
           <ul class="ns-links">
             <component
               :is="s.to ? NsLink : 'a'"
@@ -101,14 +101,14 @@ const locked = () => toast.show('This dashboard is Locked — content and layout
 
       <!-- Wide middle column -->
       <div class="ns-dash__col">
-        <NsPortlet title="Key Performance Indicators">
+        <NsPortlet title="Key Performance Indicators" section="home.kpi">
           <NsKpiTable :kpis="d.kpis" />
           <template #foot>
             <span style="color: var(--ns-muted)">As of {{ asOf }} · Date Range: This Period</span>
           </template>
         </NsPortlet>
 
-        <NsPortlet title="Trend Graph">
+        <NsPortlet title="Trend Graph" section="home.trend">
           <NsTrend :title="d.trend.title" :unit="d.trend.unit" :points="d.trend.points" />
           <template #foot>
             <NuxtLink to="/positions">Open Employment History</NuxtLink>
@@ -118,7 +118,7 @@ const locked = () => toast.show('This dashboard is Locked — content and layout
 
       <!-- Narrow right column -->
       <div class="ns-dash__col ns-dash__col--3">
-        <NsPortlet title="KPI Meter">
+        <NsPortlet title="KPI Meter" section="home.meter">
           <NsMeter
             :label="d.meter.label"
             :value="d.meter.value"
@@ -129,7 +129,7 @@ const locked = () => toast.show('This dashboard is Locked — content and layout
           />
         </NsPortlet>
 
-        <NsPortlet title="Recent Records">
+        <NsPortlet title="Recent Records" section="home.recent">
           <ul class="ns-recent">
             <component
               :is="rec.to ? NsLink : 'a'"
@@ -144,7 +144,7 @@ const locked = () => toast.show('This dashboard is Locked — content and layout
           </ul>
         </NsPortlet>
 
-        <NsPortlet title="Report Snapshots">
+        <NsPortlet title="Report Snapshots" section="home.report">
           <NsReport :rows="d.report.rows" />
           <template #foot>
             <NuxtLink to="/employee">Skills Coverage by Discipline — view full report</NuxtLink>

@@ -45,7 +45,7 @@ withDefaults(
     </div>
   </div>
 
-  <div class="ns-buttonbar">
+  <div class="ns-buttonbar" data-zone="record-actions">
     <slot name="actions" />
   </div>
 </template>

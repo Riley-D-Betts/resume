@@ -152,6 +152,27 @@ export interface Project {
   featured?: boolean
 }
 
+/* ---- colophon (/colophon — "How This Site Was Built") --------
+   The Script record that describes the stack. Kept here, not in the
+   page, so the README's single-source promise holds for this copy too.
+   ------------------------------------------------------------ */
+export interface ColophonDeployment {
+  name: string
+  audience: string
+  status: string
+  tone: Tone
+}
+export interface ColophonContent {
+  /** the record's Primary Information field group */
+  stack: FieldGroup
+  /** Notes subtab paragraphs */
+  notes: string[]
+  /** Files subtab rows */
+  files: { file: string; role: string }[]
+  /** Deployments subtab rows */
+  deployments: ColophonDeployment[]
+}
+
 export interface ResumeContent {
   meta: { title: string; description: string }
   account: {
@@ -210,6 +231,7 @@ export interface ResumeContent {
     footer: string
     privacyNotice: string
   }
+  colophon: ColophonContent
   eggs: {
     consoleBanner: string[]
     consoleHint: string
@@ -746,7 +768,40 @@ export const resume: ResumeContent = {
     ],
     footer: '© 2026 Riley Betts · Built with Nuxt · A résumé wearing a Bettsuite costume · No templates harmed',
     privacyNotice:
-      'This site runs self-hosted, first-party analytics, including sampled session replay. No third parties. Data stays on my server.',
+      'This site runs first-party analytics, including session replay, stored in my own Cloudflare account. No third-party trackers. Add ?optout=1 to any URL to opt out.',
+  },
+
+  colophon: {
+    stack: {
+      title: 'Primary Information',
+      fields: [
+        { label: 'Script Type', value: 'Suitelet (allegedly)' },
+        { label: 'Framework', value: 'Nuxt 4 · Vue 3 · SSR' },
+        { label: 'Language', value: 'TypeScript (strict)' },
+        { label: 'Runtime', value: 'Cloudflare Workers · Nitro' },
+        { label: 'Data Store', value: 'D1 (SQLite at the edge) + R2' },
+        { label: 'Deployment', value: 'Cloudflare Workers · wrangler · free tier' },
+        { label: 'Owner', value: 'Riley Betts', href: '/employee' },
+        { label: 'Status', value: 'Released', tone: 'green' },
+      ],
+    },
+    notes: [
+      'Every visible word comes from one typed file — app/data/resume.ts. Components render from it and nothing hardcodes copy, so the résumé is edited in one place.',
+      'The Bettsuite costume is a hand-written stylesheet scoped under a single body class. Behind a password at /ops sits a completely different dark console — first-party analytics with session replay, no third-party trackers. Events land in D1, replay chunks in R2, and a daily cron prunes whatever has aged out — all of it inside my own Cloudflare account.',
+      'No UI kit, no component library, no template. The masthead, the menu bar, the field groups and the subtabs are all hand-rolled CSS, built against Bettsuite’s own published design tokens rather than from memory. Any resemblance to enterprise software you have suffered through is entirely intentional.',
+    ],
+    files: [
+      { file: 'app/data/resume.ts', role: 'Content model — the single source of truth' },
+      { file: 'app/assets/css/bettsuite.css', role: 'The costume — tokens, chrome, records, lists' },
+      { file: 'app/components/ns/*.vue', role: 'Masthead, menu bar, portlets, subtabs, tables' },
+      { file: 'app/pages/**', role: 'Dashboard, records, lists, this page' },
+      { file: 'server/**', role: 'Analytics intake, /ops API, D1/R2 access' },
+      { file: 'wrangler.jsonc', role: 'Workers config — D1, R2 and cron bindings' },
+    ],
+    deployments: [
+      { name: '/ — Role Center', audience: 'All Roles', status: 'Released', tone: 'green' },
+      { name: '/ops — Analytics Console', audience: 'Administrator', status: 'Password Gated', tone: 'amber' },
+    ],
   },
 
   eggs: {

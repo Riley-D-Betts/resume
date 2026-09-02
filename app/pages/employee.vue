@@ -25,7 +25,7 @@ const readOnly = () => toast.show('This record is read-only — you have look-bu
 </script>
 
 <template>
-  <div data-section="employee">
+  <div data-page="employee">
 
     <NsRecordHeader type="Employee" name="Betts, Riley" record-id="1042" :status-label="emp.status">
       <template #actions>
@@ -45,19 +45,19 @@ const readOnly = () => toast.show('This record is read-only — you have look-bu
           </svg>
         </button>
         <NsActionMenu :items="actions" />
-        <NuxtLink to="/contact" class="ns-btn ns-btn--primary">New Message</NuxtLink>
+        <NuxtLink to="/contact" class="ns-btn ns-btn--primary" data-track-hover="contact-cta">New Message</NuxtLink>
       </template>
     </NsRecordHeader>
 
-    <NsFieldGroup :group="emp.groups[0]!" />
-    <NsFieldGroup :group="emp.groups[1]!" />
+    <NsFieldGroup :group="emp.groups[0]!" section="employee.primary" />
+    <NsFieldGroup :group="emp.groups[1]!" section="employee.details" />
 
     <NsSubtabs
       :tabs="['Human Resources', 'Access', 'Communication', 'Related Records', 'System Information']"
       v-slot="{ active }"
     >
       <!-- Human Resources: the skills sublist -->
-      <div v-show="active === 0" class="ns-subpanel">
+      <div v-show="active === 0" class="ns-subpanel" data-section="employee.skills">
         <div class="ns-tablescroll">
           <table class="ns-table">
             <thead>
@@ -81,19 +81,19 @@ const readOnly = () => toast.show('This record is read-only — you have look-bu
       </div>
 
       <!-- Access -->
-      <div v-show="active === 1" class="ns-subpanel" style="padding: 0">
+      <div v-show="active === 1" class="ns-subpanel" style="padding: 0" data-section="employee.access">
         <NsFieldGroup :group="emp.groups[2]!" />
       </div>
 
       <!-- Communication -->
-      <div v-show="active === 2" class="ns-subpanel">
+      <div v-show="active === 2" class="ns-subpanel" data-section="employee.bio">
         <div class="ns-prose">
           <p v-for="(para, i) in emp.bio" :key="i">{{ para }}</p>
         </div>
       </div>
 
       <!-- Related Records -->
-      <div v-show="active === 3" class="ns-subpanel">
+      <div v-show="active === 3" class="ns-subpanel" data-section="employee.related">
         <div class="ns-tablescroll">
           <table class="ns-table">
             <thead>
@@ -117,7 +117,7 @@ const readOnly = () => toast.show('This record is read-only — you have look-bu
       </div>
 
       <!-- System Information -->
-      <div v-show="active === 4" class="ns-subpanel">
+      <div v-show="active === 4" class="ns-subpanel" data-section="employee.sysinfo">
         <div class="ns-tablescroll">
           <table class="ns-table">
             <thead>
@@ -141,11 +141,11 @@ const readOnly = () => toast.show('This record is read-only — you have look-bu
       </div>
     </NsSubtabs>
 
-    <div class="ns-buttonbar ns-buttonbar--secondary">
+    <div class="ns-buttonbar ns-buttonbar--secondary" data-zone="record-actions">
       <button type="button" class="ns-btn" @click="readOnly">Edit</button>
       <NuxtLink to="/" class="ns-btn">Back</NuxtLink>
       <NsActionMenu :items="actions" />
-      <NuxtLink to="/contact" class="ns-btn ns-btn--primary">New Message</NuxtLink>
+      <NuxtLink to="/contact" class="ns-btn ns-btn--primary" data-track-hover="contact-cta">New Message</NuxtLink>
     </div>
   </div>
 </template>
