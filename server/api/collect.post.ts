@@ -21,6 +21,7 @@ import { isBotUA, normalizeUa } from '../utils/bots'
 import { parseUA } from '../utils/ua'
 import { offsetMin } from '../utils/tz'
 import { cachedRdns, rdnsApplies, scheduleRdns } from '../utils/rdns'
+import { rateLimitKey } from '../utils/ratelimit'
 import { setReplayTokenCookie } from '../utils/replayAuth'
 
 /**
@@ -28,9 +29,10 @@ import { setReplayTokenCookie } from '../utils/replayAuth'
  *
  * Statuses: 204 accepted (also for GPC/DNT-honoured drops and empty
  * envelopes); 400 malformed; 413 body > 256 KiB; 429 rate limit (120/min per
- * IP) or a NEW sid from an IP that already started ≥ 300 sessions today;
- * 500 D1 failure. Every 204 for a stored session refreshes the `rb_rt`
- * replay-upload cookie (delta A7).
+ * (IP, sid) under a 1200/min per-IP ceiling, so a shared NAT does not drop
+ * visitors — audit R2-L8) or a NEW sid from an IP that already started ≥ 300
+ * sessions today; 500 D1 failure. Every 204 for a stored NON-BOT session
+ * refreshes the `rb_rt` replay-upload cookie (delta A7 / audit S2).
  *
  * Subrequests: 1 pre-check batch (session row + honeypot) [+1 IP cap, +1
  * rDNS cache read on a new sid] + 1 atomic write batch.
@@ -40,6 +42,10 @@ const ESSENTIAL = new Set<string>(ESSENTIAL_TYPES)
 const DAY_MS = 24 * 60 * 60 * 1000
 const IP_SESSIONS_PER_DAY = 300
 const HEARTBEAT_FALLBACK_WINDOW_MS = 30_000
+/** Per (IP, sid) budget — one browser tab flushing at full tilt stays far below. */
+const RATE_PER_SESSION = 120
+/** Per-IP ceiling: high enough for an office / campus NAT, low enough to blunt a flood. */
+const RATE_PER_IP = 1200
 
 interface PrecheckRow {
   sid: string
@@ -50,7 +56,10 @@ interface PrecheckRow {
 
 export default defineEventHandler(async (event) => {
   const rawIp = getClientIp(event) // un-anonymized: rate limiting only
-  if (!rateLimit('collect', rawIp, 120, 60_000)) {
+  // Shared-NAT safe (audit R2-L8): the tight budget is per (IP, sid) — applied
+  // once the envelope is parsed — and the IP alone only carries a large ceiling.
+  const ipKey = rateLimitKey(rawIp)
+  if (!rateLimit('collect-ip', ipKey, RATE_PER_IP, 60_000)) {
     throw createError({ statusCode: 429, statusMessage: 'Too Many Requests' })
   }
 
@@ -79,11 +88,15 @@ export default defineEventHandler(async (event) => {
   const parsed = parseEnvelope(body, now)
   if (!parsed) throw createError({ statusCode: 400, statusMessage: 'Bad Request' })
   const { sid } = parsed
+  if (!rateLimit('collect', `${ipKey}|${sid}`, RATE_PER_SESSION, 60_000)) {
+    throw createError({ statusCode: 429, statusMessage: 'Too Many Requests' })
+  }
 
   const storeIp = getStorageIp(event)
   const ua = normalizeUa(getHeader(event, 'user-agent')) || null
   const cf = readCf(event)
 
+  let mintReplayToken = false
   try {
     const db = getDb(event)
 
@@ -129,12 +142,17 @@ export default defineEventHandler(async (event) => {
       }
     }
 
-    // Optional reverse DNS, first envelope only (C.9 / D4).
+    // Optional reverse DNS, first envelope only (C.9 / D4). The cache READ
+    // happens here (it feeds this batch); the DoH lookup is scheduled only
+    // AFTER the batch resolves — a fast answer used to back-fill
+    // session_net.rdns_host before the row existed, and the host was lost
+    // (audit R2-M4).
     let rdnsHost: string | null = null
+    let resolveRdns = false
     if (!sessionExists && !bot && rdnsApplies(event, storeIp)) {
       try {
         const cached = await cachedRdns(db, storeIp, now)
-        if (cached === undefined) scheduleRdns(event, db, storeIp, sid)
+        if (cached === undefined) resolveRdns = true
         else rdnsHost = cached
       } catch (err) {
         console.warn('[collect] rdns cache read failed:', (err as Error)?.message ?? err)
@@ -156,8 +174,11 @@ export default defineEventHandler(async (event) => {
     })
 
     const statements: ReturnType<typeof bindChecked>[] = []
-    // ① visitors — only for a sid the pre-check did not know (13 params).
-    if (!sessionExists) statements.push(bindChecked(db, VISITORS_SQL, binds.visitors, 'visitors'))
+    // ① visitors (13 params) — on EVERY envelope so last_seen_at tracks the
+    // whole visit, not just its first beacon (audit R2-L9). visit_count still
+    // increments only when this batch is the one CREATING the sessions row:
+    // the EXISTS runs before statement ② inside the same transaction.
+    statements.push(bindChecked(db, VISITORS_SQL, binds.visitors, 'visitors'))
     // ② sessions Statement A (70 params).
     statements.push(bindChecked(db, SESSION_SQL, binds.session, 'sessions'))
     // ③ session_net Statement B (39 params) — first envelope, or whenever the
@@ -181,15 +202,24 @@ export default defineEventHandler(async (event) => {
     }
 
     await db.batch(statements)
+
+    // Everything below runs only once the rows are durable.
+    // S2: the replay-upload token is minted ONLY for a sid whose non-bot
+    // sessions row now exists — a stranger's sid, or a bot's, gets no cookie
+    // and /api/replay answers 401.
+    mintReplayToken = !bot
+    if (resolveRdns) scheduleRdns(event, db, storeIp, sid)
   } catch (err) {
     if (err && typeof err === 'object' && 'statusCode' in err) throw err
     console.error('[collect] persist failed:', err)
     throw createError({ statusCode: 500, statusMessage: 'Internal Server Error' })
   }
 
-  // The replay upload token (delta A7): only a browser that /api/collect has
-  // seen for this sid can push chunks into it.
-  setReplayTokenCookie(event, sid)
+  // The replay upload token (delta A7 / audit S2): only a browser whose
+  // non-bot session row this handler has just written can push chunks into it.
+  // In production with no NUXT_SESSION_PASSWORD / NUXT_ADMIN_PASSWORD nothing
+  // is minted at all (replayAuth fails closed) and replay uploads are refused.
+  if (mintReplayToken) setReplayTokenCookie(event, sid)
   setResponseStatus(event, 204)
   return null
 })

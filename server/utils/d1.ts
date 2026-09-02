@@ -13,6 +13,43 @@ import type { D1Database, D1PreparedStatement } from '@cloudflare/workers-types'
 
 export const D1_MAX_PARAMS = 100
 
+/** One retention band: rows with `lo <= ts < hi` are deleted together. */
+export interface PruneBand {
+  lo: number
+  hi: number
+}
+
+/**
+ * The bands a retention walk should delete THIS RUN, oldest first (audit R2-H1).
+ *
+ * `anchor` is the oldest un-pruned timestamp still below `cutoff` — one
+ * indexed `SELECT MIN(<ts col>) … WHERE <ts col> < cutoff` — and the walk goes
+ * UPWARD from it, contiguously, to at most `maxBands` bands of `bandMs`; the
+ * last band is clipped so it never crosses `cutoff`.
+ *
+ * Anchoring on the cutoff instead (walking downward and stopping at the first
+ * empty band) could only ever reach `maxBands × bandMs` below it: lowering the
+ * retention, a first deploy over old data or a long outage left a permanent
+ * backlog while the log read healthy. Walking up from the oldest surviving row
+ * means every run makes progress and the backlog drains at
+ * `maxBands × bandMs` per run.
+ *
+ * Returns [] when there is nothing below the cutoff (`anchor` null / NaN /
+ * already ≥ cutoff), which is the steady state after the backlog is gone.
+ */
+export function planPruneBands(anchor: number | null | undefined, cutoff: number, maxBands: number, bandMs: number): PruneBand[] {
+  const bands: PruneBand[] = []
+  if (anchor === null || anchor === undefined || !Number.isFinite(anchor) || !Number.isFinite(cutoff)) return bands
+  if (!(bandMs > 0) || !(maxBands > 0)) return bands
+  let lo = anchor
+  while (bands.length < maxBands && lo < cutoff) {
+    const hi = Math.min(lo + bandMs, cutoff)
+    bands.push({ lo, hi })
+    lo = hi
+  }
+  return bands
+}
+
 /**
  * Count the DISTINCT bound placeholders in `sql`: every anonymous `?` is its
  * own slot; numbered `?NNN` slots count once each and raise the total to the

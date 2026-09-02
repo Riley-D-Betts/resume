@@ -28,11 +28,28 @@ test.skip(({ isMobile }) => isMobile, 'ops console is asserted once, on desktop'
 
 // ---------------------------------------------------------------- helpers
 
+/**
+ * JS errors and CSP violations only.
+ *
+ * Chromium logs a console error for every fetch that comes back 4xx/5xx, and
+ * this suite provokes those on purpose — the unauthenticated first load of
+ * /ops (four API calls 401 before the guard redirects to the login form) and
+ * the SQL console's rejected statements. Their outcome is asserted directly
+ * from the response status and the visible state, so the raw "Failed to load
+ * resource" lines are noise here; net::ERR_* (aborted / blocked loads) is
+ * dropped for the same reason. "Blocked script execution … the document's
+ * frame is sandboxed" is the replay iframe REFUSING to run a script out of
+ * the recorded DOM — the sandbox doing its job, logged once per replay. A CSP
+ * violation reads "Refused to …" and is still caught, which is what this
+ * collector exists for (plan A27).
+ */
+const IGNORED_CONSOLE
+  = /net::ERR|Failed to load resource: the server responded with a status of|Blocked script execution in .* because the document's frame is sandboxed/
+
 function collectErrors(page: Page): string[] {
   const errors: string[] = []
   page.on('console', (msg) => {
-    // net::ERR_* messages are aborted/blocked resource loads, not JS errors.
-    if (msg.type() === 'error' && !msg.text().includes('net::ERR')) errors.push(msg.text())
+    if (msg.type() === 'error' && !IGNORED_CONSOLE.test(msg.text())) errors.push(msg.text())
   })
   page.on('pageerror', (err) => errors.push(String(err)))
   return errors

@@ -22,11 +22,11 @@ function bump(db: ReturnType<typeof migratedDb>, ip: string, now: number): Attem
   return db.prepare(BUMP_ATTEMPT_SQL).get(ip, now, now, WINDOW_MS, now, WINDOW_MS, now) as unknown as Attempt
 }
 
-test('loginThrottleKey: IPv4 verbatim, IPv6 truncated to its /64', () => {
+test('loginThrottleKey: IPv4 verbatim, IPv6 truncated to its /64 (shares rateLimitKey)', () => {
   assert.equal(loginThrottleKey('203.0.113.9'), '203.0.113.9')
-  assert.equal(loginThrottleKey('2001:db8:1:2:3:4:5:6'), '2001:db8:1:2::/64')
-  assert.equal(loginThrottleKey('2001:db8::1'), '2001:db8:0:0::/64')
-  assert.equal(loginThrottleKey('fe80::1%eth0'), 'fe80:0:0:0::/64')
+  assert.equal(loginThrottleKey('2001:db8:1:2:3:4:5:6'), '2001:db8:1:2::')
+  assert.equal(loginThrottleKey('2001:db8::1'), '2001:db8:0:0::')
+  assert.equal(loginThrottleKey('fe80::1%eth0'), 'fe80:0:0:0::')
   // Two hosts on one /64 share the budget; a different /64 does not.
   assert.equal(loginThrottleKey('2001:db8:1:2:aaaa::9'), loginThrottleKey('2001:db8:1:2:bbbb::9'))
   assert.notEqual(loginThrottleKey('2001:db8:1:2::1'), loginThrottleKey('2001:db8:1:3::1'))

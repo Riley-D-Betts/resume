@@ -268,7 +268,12 @@ makes the tracker stay silent for browsers with `navigator.globalPrivacyControl`
 `server/api/collect.post.ts` trusts nothing it receives. The pipeline,
 in order:
 
-1. **Rate limit** — 120 requests/min per raw IP (per isolate).
+1. **Rate limit** — 120 requests/min per **(IP, sid)** pair under a
+   1 200/min ceiling for the IP alone (both per isolate), so a shared NAT —
+   an office, a campus, a mobile carrier — no longer drops everyone once one
+   visitor is chatty. IPv6 addresses are keyed on their **/64** prefix (a
+   single subscriber's block) and the window map is bounded: expired windows
+   are swept on insert and the oldest keys evicted past 5 000.
 2. **GPC / DNT** — with `NUXT_HONOR_GPC=true`, a request carrying
    `Sec-GPC: 1` or `DNT: 1` is answered 204 and **nothing is stored**.
    With it off (default) the flags are recorded on the session.
@@ -283,11 +288,17 @@ in order:
    `Number.isFinite`-checked and clamped into a plausible range
    (durations ≤ 6 h, vitals ≤ 120 s, CLS ≤ 10, heartbeats ≤ ⌈wall-clock
    since the last envelope ÷ 15 s⌉ + 1, per-envelope counter caps),
-   timestamps clamped into `[now − 7 d, now + 60 s]`, `u` must be a
-   same-origin pathname, section names must match `[a-z0-9._:-]{1,40}`,
+   timestamps clamped into `[now − 7 d, now + 60 s]` (a `page_leave`'s
+   `enteredAt` additionally never past its own leave time), `u` must be a
+   same-origin pathname — one leading slash, no `//host`, no `.` / `..`
+   segment — section names must match `[a-z0-9._:-]{1,40}`,
    hover keys their fixed set, `mailto:` / `tel:` hrefs their scheme +
    address only, serialised payloads over 4 KB (env 6 KB, perf 8 KB) are
-   nulled, extension URLs scrubbed. Unknown or malformed events are
+   nulled, extension URLs scrubbed (`chrome-` / `moz-` / `safari-web-` /
+   `ms-browser-extension://`). A few fields are **nulled rather than clamped**
+   when they fall outside their range — a timezone offset over ±900 minutes, a
+   negative soft-nav duration, a scroll percentage over 100 — because the
+   nearest edge would be a fabricated value. Unknown or malformed events are
    silently dropped — never an error, so a hostile client learns nothing.
    The same pass computes the **rollups**: per-session counters (prints,
    copies, email copies, form steps, mailto clicks, rage / dead / right
@@ -295,7 +306,15 @@ in order:
    the `page_visits` merges keyed by `pvid`, the `page_perf` merges, and
    the typed `session_env` row. **Heartbeats, env, vitals and perf never
    become `events` rows** — they are counted or merged into the typed
-   tables.
+   tables. Two attribution rules matter here: `entry_path` / `nav_kind` are
+   taken only from an **initial-load** pageview (`initial` / `reload` /
+   `back_forward` / `prerender` / `bfcache`; an SPA pageview is the fallback
+   only for a v1 envelope or one with no `from`), so an out-of-order beacon
+   cannot freeze a mid-visit path as the landing page; and **every pageview
+   seeds its own `page_perf` row** with the document's path and timestamp, so
+   vitals that fire after a fast navigation still land on the page that
+   actually loaded. `last_path` follows the newest event the whitelist
+   **accepted** — a dropped one never moves it.
 6. **Pre-check** — one batch: the session row (exists? events budget, last
    envelope time, already a bot?) and the honeypot flag for this
    `(ip, ua)`. An unknown sid with nothing to store gets a 204 and **no
@@ -303,13 +322,20 @@ in order:
    A new sid from a storage IP that already started ≥ 300 sessions in 24 h
    → 429 (existing sids always pass).
 7. **Enrichment** (§5) — UA parsed into browser / OS / device, `request.cf`
-   mapped to typed columns, headers read, optional reverse DNS scheduled.
+   mapped to typed columns, headers read, the optional reverse-DNS cache
+   read (the lookup itself is scheduled *after* the batch, so a fast DoH
+   answer can never back-fill a `session_net` row that does not exist yet).
 8. **Bot flag** (§6) — a bot session writes only `sessions` + `session_net`.
 9. **One atomic `db.batch()`**, statements in FK order:
-   ① `visitors` upsert (13 params, only when the sid is new; `visit_count`
-   increments inside the batch only if the sid does not exist yet, so a
-   beacon + fetch race can never double-count) → ② `sessions` Statement A
-   (70 params: identity, first-write attribution / device / geo, counters
+   ① `visitors` upsert (13 params, on **every** envelope so `last_seen_at`
+   tracks the whole visit; `visit_count` increments inside the batch only if
+   the sid does not exist yet — the `EXISTS` runs before ② in the same
+   transaction — so a beacon + fetch race can never double-count) →
+   ② `sessions` Statement A
+   (70 params: identity, first-write attribution / device / geo — except
+   `os` / `device_type`, which a later envelope may still upgrade to
+   iPadOS / tablet, since that hint rides the `env` event and rarely arrives
+   first — counters
    accumulated with `sessions.col + excluded.col`, `MAX` for flags and
    scroll, `MIN(started_at)`, `exit_path` / `last_path` only from the
    envelope with the newest `last_seen_at`; `is_returning` / `visit_n`
@@ -326,8 +352,17 @@ in order:
    `undefined` / `NaN` (D1 throws `D1_TYPE_ERROR` on `undefined` and fails
    the whole batch — one missed `?? null` would be a total collection
    outage). `tests/unit/collectSql.test.ts` pins every count.
-10. **Response** — `204` with the `rb_rt` cookie (§4). The client never
-    gets data back, only an acknowledgment.
+10. **Response** — `204`, with the `rb_rt` cookie (§4) minted **after** the
+    batch and only for a non-bot session, so the token always refers to a
+    `sessions` row that exists. The client never gets data back, only an
+    acknowledgment.
+
+**Known limitation.** The ingest is idempotent for merges (`MIN` / `MAX` /
+first-write) but **not** for the additive session counters: an envelope that
+is delivered and then retried — the client requeues when the request throws,
+so a response that was lost in flight is re-sent — counts its prints, copies,
+clicks and heartbeats twice. Sessions, page visits and page perf converge;
+`sessions.*` counters may over-count on a retried delivery.
 
 `sessions.started_at` is the **server receipt time** of the first envelope
 (`MIN` on conflict); the client clock only orders events. Each accepted
@@ -341,12 +376,17 @@ time*; the console's "active time" is always `Σ page_visits.active_ms`.
 - Rate limit 30/min per IP; GPC honoured the same way as collect; headers
   validated (`x-rb-sid` / `x-rb-rid` by the id regex — which doubles as
   **key-injection defence**, since both become part of the R2 key —
-  `x-rb-seq` 0..9999, `x-rb-ps` clamped to `[now − 7 d, now + 60 s]`);
+  `x-rb-seq` 0..9999, `x-rb-ps` clamped to `[now − 7 d, now + 60 s]`, an
+  absent or empty one meaning "now");
   chunk ≤ 2 MB; per-sid total ≤ 15 MB across all recordings.
-- **Authentication.** `/api/collect` answers every accepted envelope with
+- **Authentication.** `/api/collect` answers an accepted envelope with
   `rb_rt = sha256("rb-replay:" + secret + ":" + sid)` (HttpOnly, 30 min,
-  `Secure` on https; the secret is `NUXT_SESSION_PASSWORD`, else the admin
-  password, else a dev constant). `/api/replay` requires the cookie to
+  `Secure` on https) only when the session is **not a bot** and only once the
+  batch that wrote its `sessions` row has committed. The secret is
+  `NUXT_SESSION_PASSWORD`, else the admin password, else — **in dev only** —
+  a constant: in production with neither configured no token can be derived,
+  nothing is minted and nothing verifies, so every upload is refused rather
+  than accepted under a guessable key. `/api/replay` requires the cookie to
   match `x-rb-sid` in constant time (**401**) and the sid to have a
   non-bot `sessions` row (**403**). A stranger who knows or guesses a sid
   can no longer write chunks into it, and a chunk can never race ahead of
@@ -358,7 +398,10 @@ time*; the console's "active time" is always `Σ page_visits.active_ms`.
   when the previous row says one exists, then a second batch flips
   `pending = 0` and sets `sessions.has_replay = 1` **only once a `seq 0`
   row for that recording is on disk**. A crash between the row and the
-  flip leaves a pending row the prune sweeps after 10 minutes.
+  flip leaves a pending row the prune sweeps after 10 minutes. A re-upload
+  of a chunk that is already confirmed (`pending = 0`) is answered **204**
+  without touching the row or the object — a retry whose `put` then failed
+  used to delete a perfectly good chunk.
 - Objects are stored as `replays/<sid>/<rid>/<00042>.json[.gz]`
   (`server/utils/replayKeys.ts`); rows migrated from the pre-rid table keep
   the legacy layout `replays/<sid>/<00042>.json[.gz]` under `rid = 'legacy'`.
@@ -427,11 +470,13 @@ rows: no events, no page visits, no env.
    disallows it. A hit flags the **`(ip, ua)` pair** in `honeypot_hits`
    for 24 h and retro-flags that pair's sessions from the previous 24 h —
    keying on the UA too means one scanner behind an office NAT no longer
-   hides the office. Only navigation-like requests count
-   (`Sec-Fetch-Dest` document or absent, `Sec-Fetch-Site` not
-   `cross-site`): an `<img src="…/void.html">` embedded on another site
-   can no longer flag a bystander. Flags live in D1 rather than process
-   memory because Workers isolates are many and short-lived.
+   hides the office. Only a navigation that came **from this site** counts
+   (`Sec-Fetch-Dest` document or absent, `Sec-Fetch-Site` `same-origin`,
+   `same-site` or absent): the bait link only ever exists on our own pages,
+   so an `<img src="…/void.html">` embedded elsewhere (`cross-site`) and a
+   typed or bookmarked URL (`none`) never flag a bystander. Flags live in
+   D1 rather than process memory because Workers isolates are many and
+   short-lived.
 
 `navigator.webdriver` is stored separately (`sessions.is_webdriver`) and
 shown as a lamp / filter — it is *not* folded into `is_bot`. A session
@@ -510,11 +555,20 @@ and every step logs `changes` / `rows_read` in its own try/catch. Steps:
    first, then rows.
 2. `events` older than `NUXT_EVENT_RETENTION_DAYS` (180), deleted in rolling
    48-hour *session* bands (`sid IN (SELECT sid FROM sessions WHERE
-   started_at …)`) so both indexes are used; a missed night drains over the
-   following runs.
+   started_at …)`) so both indexes are used.
 3. `page_perf` past the same cutoff, by `ts` band.
 4. `page_visits`, `session_env`, `session_net` past
    `NUXT_SIDE_TABLE_RETENTION_DAYS` (365), same banding.
+
+   Steps 2–4 **anchor on the oldest un-pruned row** — one indexed read per
+   step (`MIN(page_perf.ts)`; for the session-banded steps, the oldest
+   session below the cutoff that still has an `events` / `session_net` row) —
+   and walk *upward* from it, contiguously, at most 8 bands (16 days) per
+   night. Anchoring on the cutoff and stopping at the first empty band, as
+   this used to, could never reach further than 16 days below it: lowering a
+   retention setting, a first deploy over old data or more than 16 missed
+   nights left a permanent backlog while the log read `changes=0`. The log
+   line now carries the anchor and the backlog in days.
 5. The **2 GB global replay cap**: oldest sessions are evicted whole
    (prefix list + delete) until under the cap.
 6. `has_replay` cleared on sessions whose completed chunks are all gone.
@@ -661,7 +715,7 @@ The admin side **fails closed**:
 | **Foreign keys are enforced** | Every FK child column is indexed; the prune deletes children explicitly; `replay_chunks_v2` deliberately has no FK (a chunk may precede its session) |
 | **`raw()` returns no `meta`** | The SQL console executes with `.all()` and only falls back to `raw({ columnNames: true })` to recover the header of an empty result |
 | D1 has no interactive transactions | All writes are single `db.batch()` calls (atomic) with `ON CONFLICT … excluded.*` upserts carrying the increments and `MIN` / `MAX` / `COALESCE` merges, so out-of-order envelopes converge |
-| Workers isolates are many + ephemeral | The rate limiter is per-isolate in-memory (effective limit ≈ limit × isolates — fine for throttling, zero D1 reads on the hot path); honeypot flags and the login lockout live in D1 |
+| Workers isolates are many + ephemeral | The rate limiter is per-isolate in-memory (effective limit ≈ limit × isolates — fine for throttling, zero D1 reads on the hot path), keyed on the IPv4 address or the IPv6 /64 with a bounded, timer-free window map (swept on insert, oldest evicted past 5 000 keys); honeypot flags and the login lockout live in D1 |
 | R2 has no cheap recursive stat | Every size cap reads the `replay_chunks_v2` ledger instead of listing the bucket |
 | `fetch keepalive` bodies cap at 64 KiB | The replay tail flush skips itself when the final chunk won't fit; keepalive is reserved for lifecycle flushes |
 | `request.cf` carries geo / ASN for free | No GeoIP database anywhere; locally the values are whatever miniflare fetched for your machine (see the README) |
@@ -672,11 +726,13 @@ The admin side **fails closed**:
 D1 counts every index entry as a row written. An `events` row costs
 1 + 2 index entries = **3**; a `page_visits` row 3; a `page_perf` row 3.
 A typical human session (3 pages, ~10 envelopes, ~55 stored events):
-visitors 3 (first envelope) + sessions 5 (insert) + ~9 updates +
-session_net 2 + session_env 2 + page_visits 9 + ~12 merges + page_perf 9 +
-~4 merges + events 55 × 3 = 165 → **≈ 220 rows**. That is ≈ **450 typical
-sessions per day** on the free budget; a session that hits the 400-event
-cap costs ≈ 1 250 rows; a bot session ≈ 8. When the daily budget is
+visitors 3 (insert) + ~9 × 2 (`last_seen_at` on every envelope, one row +
+one index entry) + sessions 5 (insert) + ~9 updates + session_net 2 +
+session_env 2 + page_visits 9 + ~12 merges + page_perf 9 (one row per page
+visit, seeded by its own pageview) + ~4 merges + events 55 × 3 = 165 →
+**≈ 240 rows**. That is ≈ **410 typical sessions per day** on the free
+budget; a session that hits the 400-event cap costs ≈ 1 250 rows; a bot
+session ≈ 10. When the daily budget is
 exhausted D1 refuses writes for the rest of the day — the site keeps
 serving, the collector logs the failure, that day's tail is lost.
 

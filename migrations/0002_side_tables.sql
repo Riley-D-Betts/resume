@@ -128,8 +128,11 @@ CREATE TABLE IF NOT EXISTS honeypot_hits (
 -- page_started_at that orders segments in the player.
 --   * replay_chunks is LEGACY: never dropped, never written again. Readers
 --     (stitcher, prune, has_replay) use replay_chunks_v2 only.
---   * Its rows are copied below under rid = legacy (INSERT OR IGNORE keeps
---     the copy idempotent).
+--   * Its rows are copied below under rid = legacy, ONCE: INSERT OR IGNORE
+--     alone would resurrect rows the retention sweep has since deleted every
+--     time 0002 is re-run, so the copy is guarded on no rid = 'legacy' row
+--     existing yet (audit R2-L7). The whole statement stays on one line —
+--     wrangler splits migrations on `;` and must see it as one statement.
 --   * R2 keys: rid = legacy rows keep the old layout replays/<sid>/<seq>
 --     (.json or .json.gz); new rows use replays/<sid>/<rid>/<seq>.
 --   * pending = 1 while the R2 object is being written: the accounting row is
@@ -152,8 +155,7 @@ CREATE TABLE IF NOT EXISTS replay_chunks_v2 (
 CREATE INDEX IF NOT EXISTS idx_replay_chunks_v2_created ON replay_chunks_v2(created_at);
 -- No (sid) index: the composite PRIMARY KEY autoindex leads with sid, so every
 -- per-session lookup (cap check, stitcher, prune) is SEARCH ... (sid=?) already.
-INSERT OR IGNORE INTO replay_chunks_v2 (sid, rid, seq, bytes, compressed, pending, created_at, page_started_at)
-  SELECT sid, 'legacy', seq, bytes, compressed, 0, created_at, created_at FROM replay_chunks;
+INSERT OR IGNORE INTO replay_chunks_v2 (sid, rid, seq, bytes, compressed, pending, created_at, page_started_at) SELECT sid, 'legacy', seq, bytes, compressed, 0, created_at, created_at FROM replay_chunks WHERE NOT EXISTS (SELECT 1 FROM replay_chunks_v2 WHERE rid = 'legacy');
 
 -- ---------------------------------------------------------------------------
 -- login_attempts: durable /ops login throttle (audit A23). The in-memory

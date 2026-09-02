@@ -273,7 +273,9 @@ export function useOpsFilters() {
         () => live().fullPath,
         () => {
           if (!live().path.startsWith('/ops')) return
-          if (sameQuery(filterPart(live().query), serializeFilters(state.value))) return
+          // The FIRST run always applies — that is when the stored seed is
+          // read. Later runs skip when the URL already says what we hold.
+          if (primed && sameQuery(filterPart(live().query), serializeFilters(state.value))) return
           applyFromRoute()
         },
         { immediate: true },

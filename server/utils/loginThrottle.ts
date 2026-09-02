@@ -1,6 +1,9 @@
 // server/utils/loginThrottle.ts — the durable /ops login throttle (audit A23,
 // security S1). Split out of the handler so the SQL and the backoff curve can
-// be exercised directly on node:sqlite. PURE: no Nitro auto-imports.
+// be exercised directly on node:sqlite. PURE apart from the key helper it
+// wraps: no Nitro auto-imports.
+
+import { rateLimitKey } from './ratelimit.ts'
 
 export const LOGIN_WINDOW_MS = 15 * 60_000
 export const LOGIN_LOCK_AFTER = 10
@@ -27,17 +30,12 @@ export const BUMP_ATTEMPT_SQL
  * single client must not get a fresh budget for every address in its prefix.
  *
  * The in-memory limiter and the durable `login_attempts` row MUST key on the
- * same string, so every /ops limiter call goes through this. When
- * `server/utils/ratelimit.ts` starts exporting `rateLimitKey()` (same
- * normalisation, owned by the ingest side), this becomes a re-export and the
- * three call sites need no change.
+ * same string, so every /ops limiter call goes through this. The normalisation
+ * itself lives in `server/utils/ratelimit.ts`; this is the thin wrapper the
+ * /ops callers and their unit tests import.
  */
 export function throttleKey(ip: string): string {
-  if (!ip.includes(':')) return ip
-  const head = ip.split('%')[0] ?? ip
-  const left = head.split('::')[0] ?? ''
-  const groups = left.split(':').filter((g) => g.length > 0)
-  return `${[...groups, '0', '0', '0', '0'].slice(0, 4).join(':')}::/64`
+  return rateLimitKey(ip)
 }
 
 /** Lock length after the n-th failure in a window: min(2^(n−10), 60) minutes. */

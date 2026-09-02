@@ -12,9 +12,9 @@
  * Modes
  *   (default)   a three-page v2 visit (/ → /employee → /contact) carrying
  *               every event type, two gzipped rrweb chunks, then the edge
- *               cases: replay auth (401/403), a pre-pruned visitor, a minimal
+ *               cases: replay auth (401), a pre-pruned visitor, a minimal
  *               v2 envelope, a v1 envelope, Sec-GPC, a bot UA, the honeypot
- *               (UA-keyed, cross-site-safe) and — LAST — a 150-envelope burst
+ *               (UA-keyed, cross-site-safe) and — LAST — two 150-envelope bursts
  *               that must trip the 120/min rate limit.
  *   --bulk N    writes N synthetic sessions (+ net/env/page_visits/page_perf/
  *               events, spread over 30 days) to .wrangler/bulk.sql and applies
@@ -640,7 +640,7 @@ async function seedVisit() {
     })
   }
 
-  // h. bot UA: session row + net facts only, zero events; its replay token is refused (403)
+  // h. bot UA: session row + net facts only, zero events; no replay token is minted
   {
     const botSid = randomUUID()
     const resBot = await postCollect(
@@ -656,8 +656,9 @@ async function seedVisit() {
       check('db: bot session still has its session_net row', count(db, 'SELECT COUNT(*) AS n FROM session_net WHERE sid = ?', botSid) === 1)
       check('db: bot session has no page_visits / session_env rows', count(db, 'SELECT COUNT(*) AS n FROM page_visits WHERE sid = ?', botSid) === 0 && count(db, 'SELECT COUNT(*) AS n FROM session_env WHERE sid = ?', botSid) === 0)
     })
-    const forbidden = await postReplay({ sid: botSid, rid: randomUUID(), seq: 0, events: replayChunk0(Date.now()), cookie: botRt, pageStartedAt: Date.now(), ua: 'curl/8.0' })
-    check('replay: valid token for a sid that is not a live non-bot session → 403', forbidden.status === 403, `status ${forbidden.status}`)
+    check('collect: a bot envelope mints NO rb_rt replay token', botRt === null || botRt === undefined, `got ${botRt ?? 'none'}`)
+    const refused = await postReplay({ sid: botSid, rid: randomUUID(), seq: 0, events: replayChunk0(Date.now()), cookie: botRt, pageStartedAt: Date.now(), ua: 'curl/8.0' })
+    check('replay: a bot session cannot upload a chunk (401, no token to present)', refused.status === 401, `status ${refused.status}`)
   }
 
   // i. honeypot: (ip, ua)-keyed, navigation-only. UA X trips /void.html; UA Y from the same IP stays clean.
@@ -698,14 +699,29 @@ async function seedVisit() {
 
   // j. rate limit burst — LAST, because it poisons the window for ~60 s.
   //    Bot UA + empty events → no blank human sessions and no rows at all.
-  const burst = await Promise.all(
+  //    The limiter keys on (ip, sid) at 120/min with a much larger per-IP
+  //    ceiling (audit A19): many people behind one NAT must not throttle each
+  //    other, while one runaway session still gets cut off. So the two bursts
+  //    below must behave DIFFERENTLY.
+  const spread = await Promise.all(
     Array.from({ length: 150 }, () =>
       postCollect({ v: 2, vid: randomUUID(), sid: randomUUID(), returning: false, url: '/', events: [] }, { ua: 'curl/8.0 rb-seed-burst' })
         .then(r => r.status)
         .catch(() => 0)),
   )
-  const count429 = burst.filter(s => s === 429).length
-  check('ratelimit: burst of 150 bot-UA envelopes hits at least one 429 (limit 120/min)', count429 >= 1, `${count429} of 150 got 429`)
+  const spread429 = spread.filter(s => s === 429).length
+  check('ratelimit: 150 envelopes from one IP with DISTINCT sids are all accepted (shared NAT)', spread429 === 0, `${spread429} of 150 got 429`)
+
+  const oneSid = randomUUID()
+  const oneVid = randomUUID()
+  const hammer = await Promise.all(
+    Array.from({ length: 150 }, () =>
+      postCollect({ v: 2, vid: oneVid, sid: oneSid, returning: false, url: '/', events: [] }, { ua: 'curl/8.0 rb-seed-burst' })
+        .then(r => r.status)
+        .catch(() => 0)),
+  )
+  const hammer429 = hammer.filter(s => s === 429).length
+  check('ratelimit: 150 envelopes on ONE sid hit the per-session limit (120/min)', hammer429 >= 1, `${hammer429} of 150 got 429`)
 }
 
 // ---------------------------------------------------------------- --bulk N

@@ -98,8 +98,10 @@ const SESSION_COUNTERS = [
   'hovers', 'eggs', 'subtabs', 'hidden_ms', 'blurs', 'ptr_n', 'touch_n', 'key_n', 'events_n',
 ] as const
 
+// os / device_type are NOT here: they are first-write with an iPadOS override
+// (see SESSION_UA_UPGRADE below).
 const SESSION_FIRST_NON_NULL = [
-  'ip', 'ua', 'browser', 'browser_ver', 'os', 'device_type',
+  'ip', 'ua', 'browser', 'browser_ver',
   'screen_w', 'screen_h', 'viewport_w', 'viewport_h', 'dpr', 'lang', 'tz',
   'country', 'region', 'city', 'lat', 'lon',
   'referrer', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
@@ -107,6 +109,19 @@ const SESSION_FIRST_NON_NULL = [
 ] as const
 
 const SESSION_MAX_FLAGS = ['max_scroll_pct', 'is_bot', 'is_webdriver', 'gpc', 'dnt', 'save_data', 'is_tor'] as const
+
+/**
+ * os / device_type: first non-null, EXCEPT the iPadOS upgrade (audit R2-M2).
+ * An iPad reports a desktop-Safari UA; only `maxTouchPoints` from the `env`
+ * event tells it apart, and `env` rides whichever envelope the probe finished
+ * on — usually not the first. Plain first-write would therefore keep 'macOS' /
+ * 'desktop' forever, so a later envelope that resolves to iPadOS / tablet
+ * wins. No extra bound parameters: the CASE reads `excluded`.
+ */
+const SESSION_UA_UPGRADE = [
+  `  os = CASE WHEN excluded.os = 'iPadOS' THEN 'iPadOS' ELSE COALESCE(sessions.os, excluded.os) END`,
+  `  device_type = CASE WHEN excluded.device_type = 'tablet' THEN 'tablet' ELSE COALESCE(sessions.device_type, excluded.device_type) END`,
+].join(',\n')
 
 export const SESSION_SQL = `INSERT INTO sessions (
   sid, vid, started_at, last_seen_at, duration_ms, ip, ua,
@@ -141,6 +156,7 @@ ON CONFLICT(sid) DO UPDATE SET
   last_path = CASE WHEN excluded.last_seen_at >= sessions.last_seen_at THEN COALESCE(excluded.last_path, sessions.last_path) ELSE sessions.last_path END,
 ${SESSION_COUNTERS.map((c) => `  ${c} = sessions.${c} + excluded.${c}`).join(',\n')},
 ${SESSION_MAX_FLAGS.map((c) => `  ${c} = MAX(sessions.${c}, excluded.${c})`).join(',\n')},
+${SESSION_UA_UPGRADE},
 ${SESSION_FIRST_NON_NULL.map((c) => `  ${c} = COALESCE(sessions.${c}, excluded.${c})`).join(',\n')}`
 
 // ---------------------------------------------------------------------------
