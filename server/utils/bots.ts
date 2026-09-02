@@ -1,5 +1,6 @@
 import type { H3Event } from 'h3'
-import { getDb } from './db'
+import { getDb } from './db.ts'
+import { HONEYPOT_CHECK_SQL } from './collectSql.ts'
 
 const BOT_RE
   = /bot|crawl|spider|slurp|headless|lighthouse|preview|monitor|python|curl|wget|scrapy|httpclient|node-fetch|axios/i
@@ -9,38 +10,51 @@ export function isBotUA(ua: string | null | undefined): boolean {
   return !ua || ua.trim().length === 0 || BOT_RE.test(ua)
 }
 
-const HONEYPOT_TTL_MS = 24 * 60 * 60 * 1000
+/** The UA exactly as `sessions.ua` stores it (≤ 400), so the (ip, ua) keys match. */
+export const UA_MAX = 400
+export function normalizeUa(raw: string | null | undefined): string {
+  if (typeof raw !== 'string') return ''
+  const s = raw.trim()
+  return s.length > UA_MAX ? s.slice(0, UA_MAX) : s
+}
+
+export const HONEYPOT_TTL_MS = 24 * 60 * 60 * 1000
 
 /**
- * Mark an IP as a honeypot visitor for 24h and retro-flag its recent
- * sessions. Flags live in D1 (Workers isolates are many and short-lived,
- * so process memory can't hold them). Pass the STORAGE form of the IP
- * (getStorageIp) so the sessions.ip match works.
+ * Mark an (ip, ua) pair as a honeypot visitor for 24 h and retro-flag its
+ * recent sessions (contract B15 / D26: keying on the UA too means one scanner
+ * behind an office NAT no longer hides the office). Flags live in D1 —
+ * Workers isolates are many and short-lived. Pass the STORAGE form of the IP
+ * (getStorageIp) and the raw UA; both are normalised here the way
+ * /api/collect stores them so the `sessions` match works.
  */
-export async function flagHoneypot(event: H3Event, ip: string): Promise<void> {
-  if (!ip) return
+export async function flagHoneypot(event: H3Event, ip: string, ua: string): Promise<void> {
+  const uaN = normalizeUa(ua)
+  if (!ip || !uaN) return
   const now = Date.now()
   try {
     const db = getDb(event)
     await db.batch([
       db.prepare(
-        'INSERT INTO honeypot_ips (ip, expires_at) VALUES (?, ?) ON CONFLICT(ip) DO UPDATE SET expires_at = excluded.expires_at',
-      ).bind(ip, now + HONEYPOT_TTL_MS),
-      db.prepare('UPDATE sessions SET is_bot = 1 WHERE ip = ? AND started_at >= ?').bind(ip, now - HONEYPOT_TTL_MS),
-      db.prepare('DELETE FROM honeypot_ips WHERE expires_at <= ?').bind(now),
+        'INSERT INTO honeypot_hits (ip, ua, expires_at) VALUES (?, ?, ?) ON CONFLICT(ip, ua) DO UPDATE SET expires_at = excluded.expires_at',
+      ).bind(ip, uaN, now + HONEYPOT_TTL_MS),
+      db.prepare('UPDATE sessions SET is_bot = 1 WHERE ip = ? AND ua = ? AND started_at >= ? AND is_bot = 0').bind(
+        ip,
+        uaN,
+        now - HONEYPOT_TTL_MS,
+      ),
     ])
   } catch (err) {
     console.error('[bots] honeypot flag failed:', err)
   }
 }
 
-export async function isHoneypotFlagged(event: H3Event, ip: string): Promise<boolean> {
-  if (!ip) return false
+/** Is this (ip, ua) currently flagged? Fails open (false) on a DB error. */
+export async function isHoneypotFlagged(event: H3Event, ip: string, ua: string): Promise<boolean> {
+  const uaN = normalizeUa(ua)
+  if (!ip || !uaN) return false
   try {
-    const row = await getDb(event)
-      .prepare('SELECT ip FROM honeypot_ips WHERE ip = ? AND expires_at > ?')
-      .bind(ip, Date.now())
-      .first()
+    const row = await getDb(event).prepare(HONEYPOT_CHECK_SQL).bind(ip, uaN, Date.now()).first()
     return row !== null
   } catch {
     return false
