@@ -1,6 +1,6 @@
-// WP4 owns this file from here — WP0 laid down the skeleton only (names from
-// contract §D.1 / §D.2; row shapes mirror migrations 0001–0003). WP5a/WP5b
-// read it; WP4 is free to reshape any response type below.
+// shared/analytics/ops.ts — response and query types of the /api/ops read API
+// (contract §D.1 / §D.2 + plan deltas A24 / A28 / A46 / A48; owned by WP4).
+// WP5a/WP5b code against these types.
 //
 // PURE MODULE: no Nuxt auto-imports, no `enum`, no parameter properties,
 // `import type` only, relative imports with explicit `.ts` extensions.
@@ -8,12 +8,12 @@
 import type { EventType, IntentFlag, NavKind } from './events.ts'
 
 // ---------------------------------------------------------------------------
-// Query surface (contract D.1)
+// Query surface (contract D.1). Every value arrives as a query-string string;
+// `server/utils/opsFilters.ts` parses + clamps it.
 // ---------------------------------------------------------------------------
 
 export type OpsRange = '24h' | '7d' | '30d' | '90d' | 'all' | 'custom'
 
-/** Every value arrives as a query-string string; `opsFilters.ts` parses + clamps. */
 export interface OpsQuery {
   range?: OpsRange
   /** Epoch ms, `range=custom` only. */
@@ -22,13 +22,14 @@ export interface OpsQuery {
   /** IANA zone of the owner (validated via Intl.DateTimeFormat); default 'UTC'. */
   tz?: string
   bots?: '1'
+  /** Exact `as_org`; `(unknown)` matches NULL / ''. */
   org?: string
   asn?: string
   /** Any visited page (page_visits EXISTS). */
   path?: string
   /** entry_path exact. */
   entry?: string
-  /** Matches country code, region or city (audit A46). */
+  /** Matches country code (exact, case-insensitive) OR region / city substring (audit A46). */
   country?: string
   device?: string
   browser?: string
@@ -38,7 +39,7 @@ export interface OpsQuery {
   webdriver?: '1' | '0'
   /** Comma list of IntentFlag, OR-ed. */
   intent?: string
-  /** LIKE across as_org, city, referrer, entry_path, rdns_host (≤ 40 UTF-8 bytes). */
+  /** LIKE across as_org, city, referrer, entry_path, rdns_host (clamped to 40 UTF-8 bytes). */
   q?: string
   compare?: '1'
   /** Orgs view: hide kind ∈ isp | cloud. */
@@ -46,12 +47,25 @@ export interface OpsQuery {
   sort?: string
   dir?: 'asc' | 'desc'
   limit?: string
-  /** Keyset cursor (sessions list, exports, session events). */
+  /** Offset paging — visitors list only (≤ 5 000). */
+  offset?: string
+  /** Keyset cursor: exports (`x-rb-next` echo) and session events (event id). */
   after?: string
+  /** Sessions list keyset (audit A24): the sort value of the last row seen … */
+  before?: string
+  /** … and its sid. */
+  beforeSid?: string
+  /** `full` adds ip / ua to the sessions projection. */
+  fields?: 'full'
+  /** Session events: comma list of EventType. */
+  types?: string
   /** Performance view dimension. */
   dim?: 'device' | 'browser' | 'os' | 'country' | 'path' | 'protocol'
-  /** Flows: sequence depth (≤ 5). */
+  /** Flows: sequence depth (2..5, default 3). */
   depth?: string
+  /** Export entity / format. */
+  entity?: ExportEntity
+  format?: ExportFormat
 }
 
 export interface OpsWindow {
@@ -60,6 +74,7 @@ export interface OpsWindow {
   prevStart: number
   prevEnd: number
   tz: string
+  range: OpsRange
 }
 
 // ---------------------------------------------------------------------------
@@ -96,7 +111,7 @@ export interface SessionRow {
   vid: string
   started_at: number
   last_seen_at: number
-  /** Heartbeat time, 15 s steps — labelled HEARTBEAT TIME, never "active". */
+  /** Heartbeat time, 15 s steps — labelled HEARTBEAT TIME (15 S STEPS), never "active". */
   duration_ms: number
   browser: string | null
   browser_ver: string | null
@@ -137,7 +152,10 @@ export interface SessionRow {
   eggs: number
   events_n: number
   /** Σ page_visits.active_ms for the sid (query-time; the one "active time"). */
-  active_ms?: number
+  active_ms: number
+  /** `fields=full` only. */
+  ip?: string | null
+  ua?: string | null
 }
 
 /** `SELECT *` on sessions + the two 1:1 side rows. */
@@ -300,7 +318,7 @@ export interface PageVisitRow {
   clicks: number
   text_len: number | null
   console_errors: number
-  /** 'spa' | 'unload' | 'hidden' (query-time fallback when left_at is set). */
+  /** 'spa' | 'unload' | 'hidden'. */
   leave_reason: string | null
 }
 
@@ -370,7 +388,7 @@ export interface EventRow {
   name: string | null
   /** null on rows written before 0003 — display `COALESCE(path, entry_path)`. */
   path: string | null
-  /** JSON string or null. */
+  /** JSON string or null (the UI parses; the server never re-serialises). */
   payload: string | null
 }
 
@@ -391,6 +409,7 @@ export interface Stats {
   mailHandoffs: number
   mailtoClicks: number
   emailCopies: number
+  /** Sessions in the window that started today (owner tz); 0 for `prev`. */
   visitsToday: number
 }
 
@@ -422,7 +441,10 @@ export interface RecentSession {
   browser: string | null
   entryPath: string | null
   pageviews: number
+  /** Σ page_visits.active_ms. */
   activeMs: number
+  /** HEARTBEAT TIME (15 s steps). */
+  durationMs: number
   isBot: boolean
   hasReplay: boolean
   intent: IntentFlag[]
@@ -433,13 +455,18 @@ export interface SeriesPoint {
   sessions: number
   pageviews: number
   visitors: number
+  /** = sessions (kept for the pre-WP5b Sparkline, which reads `{ day, n }`). */
+  n: number
 }
 
 export interface Overview {
   stats: Stats
   /** Previous period, `compare=1`. */
   prev?: Stats
+  /** Owner-tz days; range=all is bounded to the last 365 days. */
   series: SeriesPoint[]
+  /** Previous period series (sessions dashed on COMPARE), `compare=1`. */
+  prevSeries?: SeriesPoint[]
   heatmap: HeatCell[]
   topOrgs: (KN & { kind: OrgKind })[]
   topPages: KN[]
@@ -448,8 +475,8 @@ export interface Overview {
   entryPaths: KN[]
   exitPaths: KN[]
   intent: IntentTiles
-  /** Total error events in range (audit A48 — the count, not the LIMIT). */
-  errors: number
+  /** Error events in range: the count (audit A48), plus the newest ≤ 20 rows. */
+  errors: { total: number; recent: EventRow[] }
   recent: RecentSession[]
   /** Respects range + bots and joins sessions (audit A28). */
   replay: { count: number; bytes: number }
@@ -462,6 +489,12 @@ export interface Overview {
     /** page_count × page_size, null when the pragma is unavailable. */
     sizeBytes: number | null
   }
+  /** Sessions with input in the last 60 s (also on /api/ops/live, uncached). */
+  activeNow: number
+  /** Legacy aliases for the pre-WP5b overview page. */
+  visitsToday: number
+  uniques: number
+  avgActiveMs: number
 }
 
 export interface LiveSession {
@@ -478,14 +511,52 @@ export interface LiveSession {
   pageviews: number
   activeMs: number
   hasReplay: boolean
+  isBot: boolean
   intent: IntentFlag[]
 }
 
 export interface Live {
   /** Sessions with input in the last 60 s (label ACTIVE NOW // INPUT IN LAST 60 S). */
   activeNow: number
-  /** Last 5 min, ≤ 50, newest first. */
+  /** Last 5 min, ≤ 50, newest first. Sessions older than 6 h drop out (D10). */
   sessions: LiveSession[]
+  now: number
+}
+
+export type SegmentDim = 'device' | 'browser' | 'country' | 'referrerHost'
+
+export interface Segment {
+  dim: SegmentDim
+  key: string
+  sessions: number
+  engagedPct: number
+  avgActiveMs: number
+  /** form_submitted > 0 OR mailto_clicks > 0. */
+  contactPct: number
+}
+
+/** Existing keys kept (pre-WP5b overview) + the contract's additions. Over a sample of ≤ 5 000 newest sessions. */
+export interface Aggregates {
+  /** By host (B11). */
+  referrers: KN[]
+  countries: KN[]
+  cities: KN[]
+  devices: KN[]
+  browsers: KN[]
+  /** sessions.lang. */
+  languages: KN[]
+  os: KN[]
+  orgs: KN[]
+  entryPaths: KN[]
+  exitPaths: KN[]
+  /** First tag of the Accept-Language header (session_net). */
+  languagesRanked: KN[]
+  segments: Segment[]
+  sectionDwell: { section: string; avgMs: number; n: number }[]
+  scrollFunnel: { pct: number; sessions: number }[]
+  /** Newest ≤ 20 js_error rows (payload parsed) — the pre-WP5b overview shape. */
+  errors: { ts: number; payload: Record<string, unknown> | null }[]
+  sampled: { n: number; total: number }
 }
 
 export interface PageStat {
@@ -500,7 +571,7 @@ export interface PageStat {
   /** Bounced sessions with entry_path = path ÷ sessions entering at path. */
   bounceRate: number
   errors: number
-  /** TEXT CHARS / ACTIVE SEC — higher = skimming or bouncing. */
+  /** TEXT CHARS / ACTIVE SEC — higher = skimming or bouncing; null without text_len. */
   textCps: number | null
   prev?: { pageviews: number; avgActiveMs: number }
 }
@@ -524,10 +595,12 @@ export interface PageDetail {
   path: string
   series: { day: string; pageviews: number }[]
   sections: SectionStat[]
+  /** Sessions whose max scroll on the page reached the milestone. */
   scrollFunnel: { pct: number; sessions: number }[]
   next: KN[]
   prev: KN[]
   clicks: { sel: string; text: string; n: number }[]
+  /** 5 s buckets of active_ms, '60s+' last. */
   dwellHist: { bucket: string; n: number }[]
   /** ≤ 50. */
   recent: PageVisitRow[]
@@ -536,9 +609,9 @@ export interface PageDetail {
 export type FunnelStep = 'entered' | 'viewed /contact' | 'form focus' | 'mail handoff'
 
 export interface Flows {
-  /** to = '(exit)' when left_at is set and no successor exists. */
+  /** from = '(entry)' for landing visits; to = '(exit)' edges come from sessions.exit_path. */
   edges: { from: string; to: string; n: number }[]
-  /** Top 20, from a sample of ≤ 1 000 newest sessions. */
+  /** Top 20 path prefixes of `depth` (consecutive duplicates collapsed), from ≤ 1 000 newest sessions. */
   sequences: { seq: string[]; n: number }[]
   funnel: { step: FunnelStep; sessions: number }[]
   sampled: { sids: number; total: number }
@@ -557,6 +630,7 @@ export interface OrgRow {
   mailtoClicks: number
   emailCopies: number
   prints: number
+  /** ≤ 10 each. */
   countries: string[]
   cities: string[]
   firstSeen: number
@@ -573,7 +647,9 @@ export interface Orgs {
 export interface OrgDetail {
   org: string
   kind: OrgKind
+  asns: number[]
   totals: Stats
+  intent: IntentTiles
   series: { day: string; sessions: number }[]
   /** ≤ 100. */
   sessions: SessionRow[]
@@ -610,12 +686,17 @@ export interface VisitorSummary {
 export interface Visitors {
   total: number
   rows: VisitorSummary[]
+  offset: number
+  limit: number
 }
 
 export interface VisitorDetail {
   visitor: VisitorRow
+  /** Newest first, ≤ 100. */
   sessions: SessionRow[]
+  /** Newest first, ≤ 300. */
   pageVisits: PageVisitRow[]
+  /** Intent-type events, newest first, ≤ 200. */
   intents: EventRow[]
 }
 
@@ -627,12 +708,13 @@ export interface Cohorts {
   matrix: number[][]
   returningShare: number
   heatmap: HeatCell[]
+  visitors: number
 }
 
 export interface Intent {
   tiles: IntentTiles
   prev?: IntentTiles
-  /** focus → input → field → submit (+ invalid / reset / abandon). */
+  /** focus → input → field → submit (+ invalid / reset / abandon); distinct sessions per step. */
   formFunnel: { step: string; sessions: number }[]
   subjects: KN[]
   /** ≤ 100. */
@@ -654,7 +736,7 @@ export interface Intent {
   exitByPage: KN[]
   hoverKeys: { key: string; n: number; avgMs: number }[]
   prints: { ts: number; sid: string; path: string | null; org: string | null }[]
-  /** Any intent flag, ≤ 100. */
+  /** Any intent flag, newest first, ≤ 100. */
   sessions: SessionRow[]
 }
 
@@ -668,8 +750,10 @@ export interface Percentiles {
 }
 
 export interface Performance {
+  dim: NonNullable<OpsQuery['dim']>
   /** PER DOCUMENT LOAD (softNav: PER SPA NAV). */
   vitals: ({ metric: PerfMetric } & Percentiles)[]
+  /** Top 12 keys of `dim` by sample size. */
   byDim: ({ key: string; metric: PerfMetric } & Percentiles)[]
   /** SAMPLE n / N — the ≤ 5 000 newest page_perf rows in range. */
   sampled: { n: number; total: number }
@@ -681,6 +765,7 @@ export interface Performance {
     avgCount: number
     avgBytes: number
     avgCached: number
+    /** From the newest 500 rows' res_slowest. */
     slowest: { name: string; n: number; p75Ms: number }[]
   }
   longTasks: { pagesWithAny: number; avgTotalMs: number; p95Longest: number }
@@ -730,19 +815,20 @@ export interface Share {
   total: number
 }
 
-/** Top 12 + Other per dimension. Never groups by ja3_hash / ja4 / tls_*_sha1. */
+/** Top 12 + Other per dimension over ≤ 5 000 newest sessions. Never groups by ja3_hash / ja4 / tls_*_sha1. */
 export type Technology = Record<TechDim, KN[]> & {
   webdriver: Share
   gpc: Share
   dnt: Share
   cookiesOff: number
-  /** client_tz_offset_min ≠ cf_tz_offset_min (TZ OFFSET MISMATCH). */
+  /** client_tz_offset_min ≠ cf_tz_offset_min (TZ OFFSET MISMATCH); total = sessions with both offsets. */
   tzMismatch: Share
   battery: { avgLevel: number; chargingPct: number; n: number }
   storageQuota: KN[]
   voices: KN[]
   media: { avgAudioIn: number; avgVideoIn: number; avgAudioOut: number }
   memory: { avgLimitMb: number; avgUsedMb: number }
+  sampled: { n: number; total: number }
 }
 
 export interface ErrorGroup {
@@ -766,23 +852,31 @@ export interface Errors {
   series: DayPoint[]
   /** ≤ 50. */
   recent: EventRow[]
+  sampled: { n: number; total: number }
+}
+
+/** Keyset cursor of the sessions list (audit A24): echo as `before` + `beforeSid`. */
+export interface SessionsCursor {
+  before: number
+  beforeSid: string
 }
 
 export interface SessionsPage {
-  total: number
+  /** Only on the first page (no `before`); null afterwards. */
+  total: number | null
   rows: SessionRow[]
-  /** Keyset cursor for the next page (audit A24); null at the end. */
-  next: string | null
+  /** Next-page cursor; null at the end. */
+  next: SessionsCursor | null
 }
 
 export type BotReason = 'ua' | 'honeypot' | 'verified' | null
 
 export interface SessionDetail {
   session: SessionFull
-  visitor: { visitCount: number; firstSeen: number; lastSeen: number; otherSessions: number }
+  visitor: { visitCount: number; firstSeen: number; lastSeen: number; otherSessions: number } | null
   pages: PageVisitRow[]
   perf: PagePerfRow[]
-  /** First page (keyset by id). */
+  /** First page (keyset by id, D8). */
   events: EventRow[]
   nextAfter: number | null
   derived: {
@@ -791,6 +885,8 @@ export interface SessionDetail {
     /** The session's UA when botReason = 'honeypot', so collateral is diagnosable. */
     honeypotUa: string | null
     intentFlags: IntentFlag[]
+    /** Σ page_visits.active_ms. */
+    activeMs: number
   }
 }
 
@@ -840,6 +936,7 @@ export interface SqlResult {
   truncated: boolean
   durationMs: number
   rowsRead: number | null
+  explain: boolean
   /** e.g. "alias duplicate columns", "response capped at 1 MB". */
   note?: string
 }
@@ -849,5 +946,32 @@ export interface SqlError {
   error: string
 }
 
+export interface CookbookEntry {
+  title: string
+  sql: string
+  note?: string
+}
+
 export type ExportEntity = 'sessions' | 'visitors' | 'page_visits' | 'page_perf' | 'events'
 export type ExportFormat = 'csv' | 'ndjson'
+
+/** One rrweb recording (per document load), played sequentially by the UI. */
+export interface ReplaySegment {
+  rid: string
+  /** replay_chunks_v2.page_started_at of the segment's seq 0. */
+  startedAt: number
+  /** rrweb events, chunks concatenated in seq order. */
+  events: unknown[]
+}
+
+export interface ReplaySegments {
+  segments: ReplaySegment[]
+  /** Chunks read vs. rows in the ledger (the R2 subrequest budget stops at 45). */
+  chunks: { read: number; total: number }
+  truncated: boolean
+}
+
+/** 422 body of `/api/ops/replay/[id]` when the inflate budget is exceeded. */
+export interface ReplayError {
+  error: string
+}
