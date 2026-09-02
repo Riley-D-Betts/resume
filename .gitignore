@@ -25,3 +25,6 @@ playwright-report/
 
 # OS
 .DS_Store
+
+# Temporary git worktrees created for background agents
+.claude/worktrees/

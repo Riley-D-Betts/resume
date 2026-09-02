@@ -2,7 +2,7 @@
 // Workers (100k req/day), D1 (500 MB per DB on Free), R2 (10GB), cron triggers.
 //
 // One-time setup (after `npx wrangler login`):
-//   npx wrangler d1 create resume-analytics   → paste database_id below
+//   npx wrangler d1 create resume-analytics   → its id is the database_id below
 //   npx wrangler r2 bucket create resume-replays
 //   npm run db:migrate:remote
 //   npx wrangler secret put NUXT_ADMIN_PASSWORD
@@ -25,7 +25,7 @@
     {
       "binding": "DB",
       "database_name": "resume-analytics",
-      "database_id": "REPLACE_WITH_OUTPUT_OF_wrangler_d1_create",
+      "database_id": "7fcd7221-05ef-4d1c-b561-2c32c07bc9e1",
       "migrations_dir": "migrations"
     }
   ],

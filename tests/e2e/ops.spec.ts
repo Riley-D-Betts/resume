@@ -1,3 +1,4 @@
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { expect, request, test } from '@playwright/test'
 import type { APIResponse, BrowserContext, Cookie, Page } from '@playwright/test'
@@ -37,7 +38,50 @@ function collectErrors(page: Page): string[] {
   return errors
 }
 
+/**
+ * The rbops cookie is cached in a file, not just in module state: Playwright
+ * restarts the worker process after every failed test, and a fresh login per
+ * restart would trip the 5/min login limiter. test-results/ is wiped at the
+ * start of each run, so a cookie can never leak between runs; `/api/ops/me`
+ * re-validates it anyway.
+ */
+const COOKIE_FILE = path.join(process.cwd(), 'test-results', 'ops-cookies.json')
 let opsCookies: Cookie[] | null = null
+
+function rememberCookies(cookies: Cookie[]): void {
+  opsCookies = cookies
+  try {
+    mkdirSync(path.dirname(COOKIE_FILE), { recursive: true })
+    writeFileSync(COOKIE_FILE, JSON.stringify(cookies))
+  } catch {
+    // module cache still holds them
+  }
+}
+
+function recallCookies(): Cookie[] | null {
+  if (opsCookies) return opsCookies
+  try {
+    const parsed = JSON.parse(readFileSync(COOKIE_FILE, 'utf8')) as Cookie[]
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+async function stillAdmin(cookies: Cookie[]): Promise<boolean> {
+  const api = await request.newContext({
+    baseURL: BASE_URL,
+    extraHTTPHeaders: { cookie: cookies.map(c => `${c.name}=${c.value}`).join('; ') },
+  })
+  try {
+    const me = await api.get('/api/ops/me')
+    return me.ok() && ((await me.json()) as { admin?: boolean }).admin === true
+  } catch {
+    return false
+  } finally {
+    await api.dispose()
+  }
+}
 
 /** Log in through the form (once) and remember the session cookies. */
 async function loginViaForm(page: Page): Promise<void> {
@@ -47,21 +91,25 @@ async function loginViaForm(page: Page): Promise<void> {
   await password.fill(OPS_PASSWORD)
   await page.getByTestId('ops-login-submit').click()
   await expect(page.getByTestId('stat-card').first()).toBeVisible({ timeout: 20_000 })
-  opsCookies = (await page.context().cookies()).filter(c => c.name === 'rbops')
-  expect(opsCookies.length, 'login set the rbops cookie').toBeGreaterThan(0)
+  const cookies = (await page.context().cookies()).filter(c => c.name === 'rbops')
+  expect(cookies.length, 'login set the rbops cookie').toBeGreaterThan(0)
+  rememberCookies(cookies)
 }
 
-/** Reuse the cookie from the form login; fall back to one API login. */
+/** Reuse the remembered cookie; fall back to one API login. */
 async function authed(context: BrowserContext): Promise<void> {
-  if (!opsCookies) {
+  let cookies = recallCookies()
+  if (cookies && !(await stillAdmin(cookies))) cookies = null
+  if (!cookies) {
     const api = await request.newContext({ baseURL: BASE_URL })
     const res = await api.post('/api/ops/login', { data: { password: OPS_PASSWORD } })
     expect(res.status(), 'POST /api/ops/login').toBe(200)
-    opsCookies = (await api.storageState()).cookies.filter(c => c.name === 'rbops')
+    cookies = (await api.storageState()).cookies.filter(c => c.name === 'rbops')
     await api.dispose()
-    expect(opsCookies.length, 'login set the rbops cookie').toBeGreaterThan(0)
+    expect(cookies.length, 'login set the rbops cookie').toBeGreaterThan(0)
   }
-  await context.addCookies(opsCookies)
+  rememberCookies(cookies)
+  await context.addCookies(cookies)
 }
 
 /** Every page shows `... POLLING` until its first fetch lands; wait it out. */
@@ -113,6 +161,8 @@ test('overview: tiles, sparkline, filter bar, live strip, ranges, compare, D1 re
   await expect(page.getByTestId('filter-bar').first()).toBeVisible()
   await expect(page.getByTestId('live-strip')).toHaveCount(1)
   await settled(page)
+  // Both fetches (overview + aggregates) must have landed cleanly.
+  await expect(page.getByText(/LINK FAULT/)).toHaveCount(0)
 
   // Storage readouts: a real size (or an explicit PRAGMA fallback) and ≈ counts.
   const storage = page.locator('.ov__readouts')
@@ -270,6 +320,8 @@ test('orgs → detail renders tiles and a sessions table', async ({ page, contex
   await expect(rows.first()).toBeVisible({ timeout: 20_000 })
   await rows.first().click()
   await expect(page).toHaveURL(/\/ops\/orgs\/detail\?.*org=/, { timeout: 20_000 })
+  // The URL flips before the detail page mounts — wait for its first tile.
+  await expect(page.getByTestId('stat-card').first()).toBeVisible({ timeout: 20_000 })
   await settled(page)
 
   await expect(page.getByText(/LINK FAULT/)).toHaveCount(0)
@@ -290,6 +342,8 @@ test('pages → detail renders tiles and the recent visits table', async ({ page
   await expect(rows.first()).toBeVisible({ timeout: 20_000 })
   await rows.first().click()
   await expect(page).toHaveURL(/\/ops\/pages\/detail\?.*path=/, { timeout: 20_000 })
+  // The URL flips before the detail page mounts — wait for its first tile.
+  await expect(page.getByTestId('stat-card').first()).toBeVisible({ timeout: 20_000 })
   await settled(page)
 
   await expect(page.getByText(/LINK FAULT/)).toHaveCount(0)
