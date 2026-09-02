@@ -74,20 +74,22 @@ export function foldPercentiles(rows: readonly PercentileRow[]): Map<string, Per
  * The Performance view's one percentile statement (contract D.2): a sample of
  * the newest <= 5 000 page_perf rows in range, the top `keyLimit` keys of
  * `dimExpr`, eight metrics x (key + '(all)'). Bind: [tsStart, tsEnd, ...whereArgs].
+ *
+ * The metric columns are unpivoted with `json_each` + one CASE per row rather
+ * than one UNION ALL term per metric: workerd's SQLite (D1) rejects compound
+ * SELECTs beyond 5 terms, and 8 metrics x 2 would be 16.
  */
 export function perfPercentileSql(dimExpr: string, whereSql: string, keyLimit = 12): string {
   const cols = PERF_METRICS.map((m) => `p.${m.col}`).join(', ')
-  const unions = PERF_METRICS.map(
-    (m) =>
-      `SELECT b.key, '${m.metric}' AS metric, b.${m.col} AS v FROM base b JOIN keys k ON k.key = b.key WHERE b.${m.col} IS NOT NULL`
-      + ` UNION ALL SELECT '(all)', '${m.metric}', ${m.col} FROM base WHERE ${m.col} IS NOT NULL`,
-  )
+  const metrics = JSON.stringify(PERF_METRICS.map((m) => m.metric))
+  const v = `CASE m.value ${PERF_METRICS.map((m) => `WHEN '${m.metric}' THEN b.${m.col}`).join(' ')} END`
   return (
     `WITH base AS MATERIALIZED (SELECT COALESCE(NULLIF(${dimExpr}, ''), '(unknown)') AS key, ${cols} `
     + `FROM page_perf p JOIN sessions s ON s.sid = p.sid WHERE p.ts >= ? AND p.ts < ? AND ${whereSql} `
     + `ORDER BY p.ts DESC LIMIT ${SAMPLE_LIMIT}), `
     + `keys AS (SELECT key FROM base GROUP BY key ORDER BY COUNT(*) DESC LIMIT ${keyLimit}), `
-    + `u AS (${unions.join(' UNION ALL ')}) `
-    + percentileSelect('SELECT key, metric, v FROM u')
+    + `u AS (SELECT b.key AS key, m.value AS metric, ${v} AS v FROM base b JOIN keys k ON k.key = b.key CROSS JOIN json_each('${metrics}') m `
+    + `UNION ALL SELECT '(all)', m.value, ${v} FROM base b CROSS JOIN json_each('${metrics}') m) `
+    + percentileSelect('SELECT key, metric, v FROM u WHERE v IS NOT NULL')
   )
 }

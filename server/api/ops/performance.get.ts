@@ -4,7 +4,7 @@ import { requireAdmin } from '../../utils/auth'
 import { getDb } from '../../utils/db'
 import { OPS_CACHE_TTL_MS, opsCached } from '../../utils/opsCache'
 import type { Row } from '../../utils/opsDb'
-import { batchAll, bindStmt, splitDims, toNum, toStr } from '../../utils/opsDb'
+import { batchAll, bindStmt, splitDims, toNum, toStr, unionChunks } from '../../utils/opsDb'
 import type { WhereParts } from '../../utils/opsFilters'
 import { buildWhere, parseOpsQuery, parseWindow } from '../../utils/opsFilters'
 import type { PercentileRow } from '../../utils/opsPercentile'
@@ -67,9 +67,14 @@ async function build(event: H3Event, q: OpsQuery): Promise<Performance> {
   const histSql = HIST.map(
     (h, i) => `SELECT '${h.metric}' AS metric, MIN(${h.expr}, ${HIST_MAX_BIN}) AS b, COUNT(*) AS n FROM base WHERE ${h.col} IS NOT NULL GROUP BY ${i === 0 ? 'b' : '2'}`,
   ).join(' UNION ALL ')
-  const navUnion = NAV_PHASES.map((p) => `SELECT '(all)' AS key, '${p.phase}' AS metric, ${p.col} AS v FROM base WHERE ${p.col} IS NOT NULL`).join(
-    ' UNION ALL ',
+  // 8 phases → ≤ 5 UNION ALL terms per statement (workerd's compound-SELECT cap).
+  // Every (key, metric) is its own percentile partition, so splitting the
+  // phases across statements does not change a single value.
+  const navChunks = unionChunks(
+    NAV_PHASES.map((p) => `SELECT '(all)' AS key, '${p.phase}' AS metric, ${p.col} AS v FROM base WHERE ${p.col} IS NOT NULL`),
   )
+  const navStmt = (union: string) =>
+    bindStmt(db, `${baseSql(NAV_PHASES.map((p) => `p.${p.col}`).join(', '), where)} ${percentileSelect(union)}`, args)
   const netDim = (d: string, expr: string): string =>
     `SELECT * FROM (SELECT '${d}' AS dim, ${expr} AS k, COUNT(*) AS n FROM nb GROUP BY k ORDER BY n DESC LIMIT 12)`
   const rttExpr =
@@ -86,11 +91,7 @@ async function build(event: H3Event, q: OpsQuery): Promise<Performance> {
       [...local.args, ...args],
     ),
     /* 2 hist */ bindStmt(db, `${baseSql('p.lcp_ms, p.fcp_ms, p.ttfb_ms, p.inp_ms, p.cls', where)} ${histSql}`, args),
-    /* 3 nav */ bindStmt(
-      db,
-      `${baseSql(NAV_PHASES.map((p) => `p.${p.col}`).join(', '), where)} ${percentileSelect(navUnion)}`,
-      args,
-    ),
+    /* 3 nav (first chunk; the rest follow slot 7) */ navStmt(navChunks[0] ?? ''),
     /* 4 lcp elements */ bindStmt(
       db,
       `${baseSql('p.lcp_sel, p.lcp_ms', where)}, keys AS (SELECT lcp_sel FROM base WHERE lcp_sel IS NOT NULL GROUP BY lcp_sel ORDER BY COUNT(*) DESC LIMIT 12) `
@@ -131,8 +132,10 @@ async function build(event: H3Event, q: OpsQuery): Promise<Performance> {
         ].join(' UNION ALL '),
       where.args,
     ),
+    /* 8+ nav (remaining chunks) */ ...navChunks.slice(1).map(navStmt),
   ])
   const at = (i: number): Row[] => res[i] ?? []
+  const navRows = [...at(3), ...navChunks.slice(1).flatMap((_, i) => at(8 + i))]
 
   const p = foldPercentiles(at(0) as unknown as PercentileRow[])
   const vitals = PERF_METRICS.map((m) => ({ metric: m.metric, ...(p.get(percentileKey('(all)', m.metric)) ?? emptyP()) }))
@@ -160,7 +163,7 @@ async function build(event: H3Event, q: OpsQuery): Promise<Performance> {
       .sort((a, b) => a.from - b.from),
   }))
 
-  const nav = foldPercentiles(at(3) as unknown as PercentileRow[])
+  const nav = foldPercentiles(navRows as unknown as PercentileRow[])
   const navBreakdown = NAV_PHASES.map((ph) => ({ phase: ph.phase, p50: nav.get(percentileKey('(all)', ph.phase))?.p50 ?? 0 }))
 
   const lcpElements = [...foldPercentiles(at(4) as unknown as PercentileRow[])]

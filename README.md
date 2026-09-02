@@ -102,6 +102,29 @@ If a migration goes wrong:
 - Rollback of the code is a redeploy of the previous Worker; the schema
   only ever grows.
 
+### Deploying from GitHub (Workers Builds)
+
+The Worker is connected to this repository, so a push to `main` builds and
+deploys it. Two settings under Workers → riley-betts-resume → Settings →
+Build configuration:
+
+| Field | Value |
+| --- | --- |
+| Build command | `npm run build` |
+| Deploy command | `npm run db:migrate:remote && npx wrangler deploy` |
+
+The migration belongs in the **deploy** command, not the build command —
+the build command runs on every branch build, while the deploy command
+only runs for the production branch, and migrations must not run twice.
+Putting `wrangler deploy` in both fields deploys the Worker twice.
+
+`wrangler deploy` reads `wrangler.jsonc` from the repository, so the D1
+`database_id` there must be the real UUID (`npx wrangler d1 list`, or the
+database's page in the dashboard). It is an identifier, not a secret —
+it is meant to be committed. With the placeholder still in place the build
+succeeds and the deploy fails with
+`binding DB of type d1 must have a valid database_id specified [code: 10021]`.
+
 Attach your domain under Workers → riley-betts-resume → Settings →
 Domains & Routes (the domain's DNS must already be on Cloudflare). The
 free tier covers all of it: 100k requests/day (Workers), 500 MB per

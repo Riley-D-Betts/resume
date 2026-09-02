@@ -5,7 +5,7 @@ import { requireAdmin } from '../../utils/auth'
 import { getDb } from '../../utils/db'
 import { OPS_CACHE_TTL_MS, opsCached } from '../../utils/opsCache'
 import type { Row } from '../../utils/opsDb'
-import { batchAll, bindStmt, pctOf, splitDims, toNum, toStr } from '../../utils/opsDb'
+import { batchAll, bindStmt, pctOf, splitDims, toNum, toStr, unionChunks } from '../../utils/opsDb'
 import { ENGAGED_SQL, acceptLanguageFirstSql, activeSql, buildWhere, parseOpsQuery, parseWindow, referrerHostSql } from '../../utils/opsFilters'
 import { TZ_HOUR_MS } from '../../utils/opsTz'
 
@@ -50,7 +50,8 @@ async function build(event: H3Event, q: OpsQuery): Promise<Aggregates> {
     + `${activeSql('s')} AS active_ms FROM sessions s LEFT JOIN session_net n ON n.sid = s.sid WHERE ${where.sql} `
     + `ORDER BY s.started_at DESC LIMIT ${SAMPLE})`
 
-  const dimsSql = [
+  // 11 dimensions → statements of ≤ 5 UNION ALL terms (workerd's compound-SELECT cap).
+  const dimChunks = unionChunks([
     topDim('referrers', referrerHostSql('referrer')),
     topDim('countries', unk('country')),
     topDim('cities', unk('city')),
@@ -62,7 +63,7 @@ async function build(event: H3Event, q: OpsQuery): Promise<Aggregates> {
     topDim('entryPaths', unk('entry_path')),
     topDim('exitPaths', `COALESCE(NULLIF(exit_path, ''), NULLIF(last_path, ''), '??')`),
     topDim('languagesRanked', acceptLanguageFirstSql('accept_language')),
-  ].join(' UNION ALL ')
+  ])
 
   const segmentsSql = [
     segmentDim('device', unk('device_type')),
@@ -72,7 +73,7 @@ async function build(event: H3Event, q: OpsQuery): Promise<Aggregates> {
   ].join(' UNION ALL ')
 
   const res = await batchAll(db, [
-    /* 0 */ bindStmt(db, `${base} ${dimsSql}`, where.args),
+    /* 0 (dimChunks.length statements, read back as one) */ ...dimChunks.map((u) => bindStmt(db, `${base} ${u}`, where.args)),
     /* 1 */ bindStmt(db, `${base} ${segmentsSql}`, where.args),
     /* 2 */ bindStmt(
       db,
@@ -95,7 +96,9 @@ async function build(event: H3Event, q: OpsQuery): Promise<Aggregates> {
     ),
     /* 5 */ bindStmt(db, `SELECT COUNT(*) AS n FROM sessions s WHERE ${where.sql}`, where.args),
   ])
-  const at = (i: number): Row[] => res[i] ?? []
+  // Slot 0 is the concatenation of the dim chunks; slots 1+ follow them.
+  const D = dimChunks.length
+  const at = (i: number): Row[] => (i === 0 ? res.slice(0, D).flat() : (res[D - 1 + i] ?? []))
 
   const dims = splitDims(at(0), DIMS)
   const segments: Segment[] = at(1)

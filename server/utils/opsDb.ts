@@ -10,6 +10,20 @@ export function bindStmt(db: D1Database, sql: string, args: readonly unknown[] =
   return args.length > 0 ? s.bind(...args) : s
 }
 
+/**
+ * workerd's SQLite (D1, local and remote) rejects a compound SELECT beyond
+ * FIVE terms ("too many terms in compound SELECT") — far below upstream's
+ * 500. Every `UNION ALL` list the ops routes build goes through this.
+ */
+export const UNION_MAX_TERMS = 5
+
+/** Split `UNION ALL` terms into compound statements of ≤ `max` terms each. */
+export function unionChunks(terms: readonly string[], max = UNION_MAX_TERMS): string[] {
+  const out: string[] = []
+  for (let i = 0; i < terms.length; i += max) out.push(terms.slice(i, i + max).join(' UNION ALL '))
+  return out
+}
+
 /** Run every statement in one D1 round trip; returns each statement's rows. */
 export async function batchAll<T = Row>(db: D1Database, stmts: D1PreparedStatement[]): Promise<T[][]> {
   if (stmts.length === 0) return []

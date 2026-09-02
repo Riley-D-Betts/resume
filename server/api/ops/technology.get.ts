@@ -4,7 +4,7 @@ import { requireAdmin } from '../../utils/auth'
 import { getDb } from '../../utils/db'
 import { OPS_CACHE_TTL_MS, opsCached } from '../../utils/opsCache'
 import type { Row } from '../../utils/opsDb'
-import { batchAll, bindStmt, pctOf, splitDims, toNum } from '../../utils/opsDb'
+import { batchAll, bindStmt, pctOf, splitDims, toNum, UNION_MAX_TERMS } from '../../utils/opsDb'
 import { acceptLanguageFirstSql, buildWhere, parseOpsQuery, parseWindow } from '../../utils/opsFilters'
 
 const SAMPLE = 5000
@@ -62,8 +62,13 @@ const DIM_EXPR: Record<TechDim | 'storageQuota' | 'voices', string> = {
 }
 
 const ALL_DIMS = Object.keys(DIM_EXPR) as (keyof typeof DIM_EXPR)[]
-/** ≤ 5 UNION ALL grouped statements (contract D.2). */
-const GROUPS = [ALL_DIMS.slice(0, 7), ALL_DIMS.slice(7, 14), ALL_DIMS.slice(14, 21), ALL_DIMS.slice(21, 27), ALL_DIMS.slice(27)]
+/**
+ * Grouped UNION ALL statements of ≤ UNION_MAX_TERMS (5) dimensions each —
+ * workerd's SQLite rejects longer compound SELECTs (33 dims → 7 statements,
+ * still well inside the ≤ 20 D1 calls of contract D.2).
+ */
+const GROUPS: (keyof typeof DIM_EXPR)[][] = []
+for (let i = 0; i < ALL_DIMS.length; i += UNION_MAX_TERMS) GROUPS.push(ALL_DIMS.slice(i, i + UNION_MAX_TERMS))
 
 const BASE_COLS =
   's.sid, s.is_webdriver, s.gpc, s.dnt, s.screen_w, s.screen_h, s.dpr, s.viewport_w, s.viewport_h, '

@@ -81,7 +81,8 @@ onMounted(() => {
   if ('ResizeObserver' in window) {
     ro = new ResizeObserver(entries => {
       const w = entries[0]?.contentRect.width
-      if (w) width.value = Math.max(160, Math.floor(w))
+      // Next frame: a same-frame write re-sizes the SVG inside the observer's own delivery and trips "ResizeObserver loop completed".
+      if (w) requestAnimationFrame(() => (width.value = Math.max(160, Math.floor(w))))
     })
     ro.observe(el)
   }
