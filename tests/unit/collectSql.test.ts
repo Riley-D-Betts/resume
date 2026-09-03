@@ -128,7 +128,7 @@ test('every statement binds ≤ 100 distinct placeholders and exactly the docume
     {
       visitors: 13,
       sessions: 70,
-      session_net: 39,
+      session_net: 40,
       session_env: 62,
       page_visits: 19,
       page_perf: 38,
@@ -263,12 +263,13 @@ const HDR = {
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
 
 /** Run the collect batch the way collect.post.ts does, with checkArgs on every statement. */
-function persist(db: DatabaseSync, parsed: NonNullable<ReturnType<typeof parseEnvelope>>, opts: { isNew: boolean; bot?: boolean; heartbeats?: number; now: number; ua?: string }) {
+function persist(db: DatabaseSync, parsed: NonNullable<ReturnType<typeof parseEnvelope>>, opts: { isNew: boolean; bot?: boolean; heartbeats?: number; now: number; ua?: string; shareToken?: string | null }) {
   const bot = opts.bot ?? false
   const ua = opts.ua ?? UA
   const facts: CollectFacts = {
     now: opts.now, storeIp: '203.0.113.9', ua, dev: parseUA(ua, { maxTouchPoints: parsed.maxTouchPoints }), cf: CF, hdr: HDR, bot,
     heartbeats: opts.heartbeats ?? parsed.heartbeats, rows: bot ? [] : parsed.events, cfTzOffsetMin: offsetMin(CF.cfTz, opts.now), rdnsHost: null,
+    shareToken: opts.shareToken ?? null,
   }
   const binds = buildCollectBinds(parsed, facts)
   const exec = (label: string, sql: string, args: unknown[]): void => {
@@ -427,6 +428,7 @@ test('ingest mapping: every event type flows through sanitize → binds → SQL 
   assert.equal(n1.client_tz_offset_min, -360)
   assert.equal(n1.cf_tz_offset_min, offsetMin('America/Chicago', now))
   assert.equal(n1.ch_ua, 'Chromium/126;Google Chrome/126')
+  assert.equal(n1.share_token, null, 'no rb_k cookie → no share token')
   const e1 = get(db, 'SELECT * FROM session_env WHERE sid = ?', sid)
   assert.equal(e1.gpu_vendor, 'Google Inc. (NVIDIA)')
   assert.equal(e1.color_scheme, 'dark')
@@ -686,5 +688,28 @@ test('entry_path stays the landing page when an out-of-order SPA beacon arrives 
   // last_seen_at wins), so the late-delivered landing envelope owns it here —
   // unchanged by this fix, which only governs entry_path / nav_kind.
   assert.equal(s.exit_path, '/')
+  db.close()
+})
+
+test('session_net.share_token is first-write: a later envelope cannot steal the link attribution', () => {
+  const db = migrated()
+  const now = 1_800_000_000_000
+  const pv = (t: number, pvid: string) => ({ t, type: 'pageview', name: null, u: '/', p: { pvid, path: '/', from: null, kind: 'initial' } })
+  const tokenOf = (): unknown => get(db, 'SELECT share_token FROM session_net WHERE sid = ?', SID_A).share_token
+
+  // The document request carried ?k=7fq2, so the rb_k cookie rides the first envelope.
+  persist(db, parseEnvelope(body([pv(now - 1000, PVID_1)]), now)!, { isNew: true, now, shareToken: '7fq2' })
+  assert.equal(tokenOf(), '7fq2')
+
+  // A later envelope carrying a DIFFERENT cookie (a second link opened inside
+  // the same session window) must not re-attribute the visit.
+  persist(db, parseEnvelope(body([{ t: now + 30_000, type: 'find', name: null, u: '/', p: {} }]), now + 60_000)!, {
+    isNew: false, now: now + 60_000, shareToken: 'mk93',
+  })
+  assert.equal(tokenOf(), '7fq2', 'first write wins')
+
+  // And an envelope with no cookie at all leaves it alone (COALESCE, not overwrite).
+  persist(db, parseEnvelope(body([{ t: now + 70_000, type: 'find', name: null, u: '/', p: {} }]), now + 90_000)!, { isNew: false, now: now + 90_000 })
+  assert.equal(tokenOf(), '7fq2')
   db.close()
 })

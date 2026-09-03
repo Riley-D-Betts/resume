@@ -22,6 +22,7 @@ const ALL_LINKS: NavLink[] = [
   { to: '/ops/performance', label: 'PERFORMANCE', active: prefix('/ops/performance') },
   { to: '/ops/technology', label: 'TECHNOLOGY', active: prefix('/ops/technology') },
   { to: '/ops/errors', label: 'ERRORS', active: prefix('/ops/errors') },
+  { to: '/ops/share', label: 'SHARE', active: prefix('/ops/share') },
   { to: '/ops/sql', label: 'SQL', active: prefix('/ops/sql') },
   { to: '/', label: 'VIEW SITE', active: () => false },
 ]

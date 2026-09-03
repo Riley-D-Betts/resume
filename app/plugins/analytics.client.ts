@@ -20,7 +20,19 @@ export default defineNuxtPlugin((nuxtApp) => {
       lsSet('rb_optout', '1')
       console.info('[rb] analytics opt-out saved — this browser will not be tracked')
     }
-    if (lsGet('rb_optout')) return
+    if (lsGet('rb_optout')) {
+      // Mirror the flag into a cookie so the SERVER honours it too: the share
+      // capture (server/middleware/share-capture.ts) runs before any of this
+      // and cannot read localStorage. Refreshed on every load, so a browser
+      // that opted out before this existed is covered on its next visit.
+      try {
+        const secure = location.protocol === 'https:' ? '; Secure' : ''
+        document.cookie = `rb_optout=1; path=/; max-age=${365 * 24 * 60 * 60}; SameSite=Lax${secure}`
+      } catch {
+        /* cookies refused: the client-side gate below still holds */
+      }
+      return
+    }
     const config = useRuntimeConfig().public
     if (config.honorGpc && (navigator as Navigator & { globalPrivacyControl?: boolean }).globalPrivacyControl === true) {
       return

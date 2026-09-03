@@ -297,6 +297,22 @@ async function pruneOnce(env: CfBindings): Promise<void> {
       const r = await run(ctx, 'rdns_expiry', db.prepare('DELETE FROM rdns_cache WHERE expires_at <= ?').bind(now))
       log('rdns_expiry', meta(r))
     }],
+    // 8b. share_hits past sideTableRetentionDays, banded on its own `ts`
+    //     (idx_share_hits_ts covers both the anchor and the band). share_links
+    //     rows are NEVER pruned — a link outlives its hits, so a link whose
+    //     evidence has aged out still reads as a link that was minted and
+    //     sent. Placed before the PII scrub so a share backlog can never
+    //     starve it: 1 subrequest in the steady state, up to 9 while draining,
+    //     against the 40 the run shares.
+    ['share_hits_retention', () => bands(
+      ctx,
+      'share_hits_retention',
+      sideCutoff,
+      'SELECT MIN(ts) AS oldest FROM share_hits WHERE ts < ?',
+      (lo, hi) => [
+        db.prepare('DELETE FROM share_hits WHERE ts >= ? AND ts < ?').bind(lo, hi),
+      ],
+    )],
     // 9. PII scrub (delta A20): ip / ua / lat / lon nulled past piiRetentionDays, ≤ 500 rows per statement.
     ['pii_scrub', async () => {
       const total: Meta = { changes: 0, rows_read: 0 }

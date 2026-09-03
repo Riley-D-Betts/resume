@@ -37,17 +37,20 @@ the whole thing fits the free tier.
    │ events · replay_chunks_v2  │                   │ stitch + inflate
    │ honeypot_hits · rdns_cache │                   │ (byte-budgeted)
    │ login_attempts             │                   │
+   │ share_links · share_hits   │                   │
    └──────────┬─────────────────┘                   │
               │ reads                               │
               ▼                                     │
-   GET/POST /api/ops/*  ◀── password-gated /ops console (12 views,
+   GET/POST /api/ops/*  ◀── password-gated /ops console (13 views,
                             SQL console, export, replay player)
 
    daily cron ──▶ server/plugins/prune.ts ──▶ retention, PII scrub, caps
 ```
 
-Two write paths in, one read path out, one janitor. Everything below is
-the detail.
+Three write paths in — two from the browser, plus the share-link capture
+that writes straight off the HTML document request (`GET /?k=<token>`,
+`server/middleware/share-capture.ts`, no JavaScript involved at all) — one
+read path out, one janitor. Everything below is the detail.
 
 ## File map
 
@@ -59,6 +62,9 @@ the detail.
 | Client plugin (composes the tracker) | `app/plugins/analytics.client.ts` |
 | Tracker modules | `app/utils/analytics/{core,pages,sections,interactions,errors,perf,env,replay}.ts` |
 | SSR handoff of document-request facts | `server/middleware/nav-capture.ts` → `app/plugins/nav-capture.server.ts` |
+| Share-link capture (`?k=`), no client JS | `server/middleware/share-capture.ts` |
+| Share token grammar, capture SQL, forwarded rule | `server/utils/share.ts`, `server/utils/shareOps.ts` |
+| Named link-preview agents (Slack, LinkedIn, …) | `server/utils/previewAgents.ts` |
 | Component bridge (`window.__rbTrack`) | `app/composables/useTrack.ts`, `app/types/rb-track.d.ts` |
 | Easter eggs | `app/plugins/egg.client.ts` |
 | Event ingest | `server/api/collect.post.ts` |
@@ -75,7 +81,7 @@ the detail.
 | Cloudflare bindings accessors | `server/utils/db.ts` |
 | Health | `server/api/health.get.ts` |
 | Daily retention prune | `server/plugins/prune.ts` |
-| D1 schema | `migrations/0001_init.sql`, `0002_side_tables.sql`, `0003_session_columns.sql` |
+| D1 schema | `migrations/0001_init.sql`, `0002_side_tables.sql`, `0003_session_columns.sql`, `0004_export_indexes.sql`, `0005_share_links.sql` |
 | /ops auth (sealed cookie, D1 lockout) | `server/utils/auth.ts`, `server/api/ops/login.post.ts` |
 | /ops read API | `server/api/ops/**` |
 | /ops query surface, cache, SQL guard, CSV | `server/utils/{opsFilters,opsCache,sqlGuard,csv,orgKind,opsDb,opsPercentile}.ts` |
@@ -467,7 +473,10 @@ headline numbers. A bot session keeps only its `sessions` + `session_net`
 rows: no events, no page visits, no env.
 
 1. **UA wordlist** (`isBotUA`): empty UA, or anything matching
-   `bot|crawl|spider|slurp|headless|lighthouse|preview|monitor|python|curl|wget|scrapy|httpclient|node-fetch|axios`.
+   `bot|crawl|spider|slurp|headless|lighthouse|preview|monitor|python|curl|wget|scrapy|httpclient|node-fetch|axios|facebookexternalhit|whatsapp|mastodon|pagerenderer`.
+   The last four carry no `bot` / `crawl` / `preview` token of their own and
+   used to pass as human browsers; they are named link-preview fetchers
+   (§11) and automation either way.
 2. **Verified bots**: Cloudflare's `botManagement.verifiedBot` (paid plans;
    NULL and ignored on Free).
 3. **Honeypot**: `GET /void.html` is a trap route no human can reach — the
@@ -497,7 +506,7 @@ is diagnosable.
 | --- | --- | --- |
 | `visitors` | one row per browser (`vid`) | first / last seen, `visit_count`, first-touch referrer + UTM, first / last org + country, first entry path |
 | `sessions` | one row per session (`sid`), **71 columns** | timing, stored IP, UA + parsed browser / OS / device, screen / viewport, geo, referrer / UTM, `entry_path` / `exit_path` / `last_path`, `nav_kind`, `asn` / `as_org`, `is_bot`, `is_webdriver`, `gpc` / `dnt` / `save_data` / `is_tor`, `is_returning` / `visit_n`, `has_replay`, `pageviews`, `duration_ms` (heartbeats), `max_scroll_pct`, 25 counters (prints, copies, email_copies, selects, form_started / submitted, finds, searches, exit_intents, rage / dead / right clicks, errors, outbounds, mailto_clicks, hovers, eggs, subtabs, hidden_ms, blurs, ptr / touch / key counts, first_interaction_ms, events_n). Indexes: `started_at`, `(vid, started_at)`, `ip`, `as_org` |
-| `session_net` | 1:1 with sessions | `request.cf` network / geo extras, TLS facts, request headers, the document-request `fetch_*` facts, client vs Cloudflare tz offsets, `rdns_host` |
+| `session_net` | 1:1 with sessions, **40 columns** | `request.cf` network / geo extras, TLS facts, request headers, the document-request `fetch_*` facts, client vs Cloudflare tz offsets, `rdns_host`, `share_token` (index `share_token`) |
 | `session_env` | 1:1 with sessions | the typed `env` probe (62 columns), latest non-null wins |
 | `page_visits` | one row per page visit (`pvid`) — **the unit of page analytics** | path, entered / left, `from_path`, `nav_kind`, `soft_nav_ms`, active / hidden ms, scroll stats, sections seen, clicks, text length, leave reason. Indexes: `(sid, entered_at)`, `(path, entered_at)` |
 | `page_perf` | one row per document load / SPA visit (`pvid`) | vitals, nav-timing phases, sizes, protocol, resource summary (JSON), long tasks / LoAF, `soft_nav_ms`. Indexes: `ts`, `sid` |
@@ -506,6 +515,8 @@ is diagnosable.
 | `honeypot_hits` | one row per flagged `(ip, ua)` | 24 h TTL; `honeypot_ips` (0001) stays for the legacy sweep |
 | `rdns_cache` | one row per looked-up IP | host or NULL, `expires_at` |
 | `login_attempts` | one row per client IP (/64 for IPv6) | the durable /ops login throttle |
+| `share_links` | one row per minted share link | 4-character `token` (PK), the recipient `label` the owner typed, `note`, `channel`, `created_at`, `revoked`. Never pruned — a link outlives its hits |
+| `share_hits` | one row per document request carrying a known link | `token` FK (cascade), `ts`, `kind` (`view` / `unfurl` / `bot`), `agent` (platform name), `as_org`, `country`, `referrer_host`, `path`. **No IP, no raw user agent.** Indexes: `(token, ts)`, `ts` |
 
 Schema rules, written at the top of every migration: never drop or rename
 a column; `ALTER … ADD COLUMN` only with constant defaults (O(1) on D1,
@@ -580,6 +591,10 @@ and every step logs `changes` / `rows_read` in its own try/catch. Steps:
 6. `has_replay` cleared on sessions whose completed chunks are all gone.
 7. Expired honeypot flags (`honeypot_hits` + legacy `honeypot_ips`).
 8. Expired `rdns_cache` rows.
+8b. `share_hits` past `NUXT_SIDE_TABLE_RETENTION_DAYS`, banded on its own
+    `ts` with the same anchor walk. It sits *before* the PII scrub so a
+    share backlog can never starve it: 1 subrequest in the steady state, up
+    to 9 while draining. `share_links` rows are never pruned.
 9. **PII scrub**: `ip`, `ua`, `lat`, `lon` nulled on sessions older than
    `NUXT_PII_RETENTION_DAYS` (365), 500 rows per statement.
 10. Orphan sweeps: `pending = 1` ledger rows older than 10 minutes (both
@@ -625,10 +640,11 @@ hour buckets are computed in **the owner's timezone** (`?tz=`), never UTC.
 | **Performance** | p50 / p75 / p95 for TTFB, FCP, LCP, CLS, INP, DCL, load, soft-nav — overall and by device / browser / OS / country / page / protocol, computed in SQL over a ≤ 5 000-row sample (no sample → `—`, never a 0 ms GOOD lamp); LCP series + histogram + elements, nav-phase breakdown, slowest resources, long tasks / LoAF, RTT / protocol / TLS / colo |
 | **Technology** | GPU, UA-CH facts, protocols, network quality, `prefers-*`, TZ-offset mismatch, webdriver — top 12 + Other |
 | **Errors** | grouped JS / resource / console errors with counts and last seen, by browser / page |
+| **Share** `/ops/share` | mint a link per named recipient, then per link: opens / views / unfurls / bots, distinct readers, attributed sessions, organisations, countries, unfurl platforms, FORWARDED with its evidence, the hit log and the sessions the link produced (§11) |
 | **SQL console** `/ops/sql` | read-only `SELECT` / `WITH` (+ `EXPLAIN QUERY PLAN`), schema browser with ≈ row counts, cookbook presets, saved queries, COPY CSV. Comments are stripped before the statement runs and unbalanced parentheses are refused, so nothing can escape the `SELECT * FROM (…) LIMIT ?` wrap; `pragma_*` / `dbstat` / `sqlite_dbpage` are denied like `PRAGMA` itself |
 | **Export** | CSV / NDJSON of sessions / visitors / page_visits / page_perf / events for the current filter |
 
-The nav strip lists twelve links, each gated on the route actually
+The nav strip lists thirteen links, each gated on the route actually
 existing, so a partial deploy never 404s.
 
 ### The read API
@@ -777,6 +793,109 @@ And the two failure philosophies, stated once more because they're the
 spine of the design: the **collection path fails open** (a broken tracker
 must never break the résumé), the **admin path fails closed** (a missing
 password must never expose the data).
+
+## 11 · Share links: knowing when a link gets passed on
+
+A résumé link is sent to one recruiter and ends up in a Slack channel, an
+ATS, three inboxes. This is the narrow, honest version of finding that out.
+
+**What it is not.** There is no forwarding tree: no URL rewriting, no
+per-visitor token written into the address bar, no chain naming each hop's
+parent, and **no client-side JavaScript takes part at all**. The wider
+design was on the table and was deliberately not built. The price is that a
+link opened by several people cannot say *which* people — so the console
+says exactly that.
+
+### The link
+
+`https://rileybetts.dev/?k=7fq2`. The token is four characters from a
+32-symbol lowercase alphabet with no `l`, `1`, `o` or `0`, minted in
+`/ops` against a **label the owner types himself** ("Jane Okafor — Acme").
+It never grows, because nothing is ever appended to it. Minting is
+`POST /api/ops/share`; the collision retry *is* the insert
+(`INSERT OR IGNORE`, six attempts against 1 048 576 tokens), so two
+concurrent mints can never claim the same token.
+
+### Capture
+
+`server/middleware/share-capture.ts` runs on the **HTML document request**,
+not in `/api/collect`, and that placement is the whole point: a Slack,
+Teams or LinkedIn preview bot runs no JavaScript, so the document request
+is the only trace it ever leaves. The middleware pays one `URL` parse and
+returns immediately when there is no `k`; it then applies the same skip
+rules as `nav-capture` (GET only, no `/api/`, `/_nuxt`, `/ops`,
+`/void.html`, no dotted paths), rejects a malformed token before any I/O,
+rate-limits at 60/min per address, and writes the row **after the response**
+through `waitUntil`. A D1 failure is logged and swallowed — the collection
+path fails open.
+
+The write is one statement with no preceding read:
+
+```sql
+INSERT INTO share_hits (token, ts, kind, agent, as_org, country, referrer_host, path)
+SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM share_links WHERE token = ?)
+```
+
+so an unknown `?k=` costs nothing and **cannot be walked to write rows**.
+
+| Stored | Deliberately not stored |
+| --- | --- |
+| `ts`, `kind`, platform `agent`, `as_org`, `country`, `referrer_host`, `path` | the IP, the raw user agent, the full referring URL, any name for anyone but the labelled recipient |
+
+`sessions` already carries the IP and UA under a retention and scrub
+policy; copying them here would widen the PII surface for no analytical
+gain. `agent` is a **platform name** from the table in
+`server/utils/previewAgents.ts` (Slack, Teams, LinkedIn, WhatsApp,
+Telegram, Discord, Facebook, X, Google, Bing, Apple, Mastodon), never the
+header itself. `classifyFetch(ua)` returns `unfurl` for those twelve,
+`bot` for anything `isBotUA` catches, and `view` for everything else.
+General crawlers are not called unfurls: that would invent evidence of
+sharing that does not exist.
+
+### The join into sessions
+
+The same request sets an `rb_k` cookie (90 days, `SameSite=Lax`,
+`HttpOnly`, `Secure` on https). `/api/collect` reads it into
+`session_net.share_token` with a **first-write merge**, so a later envelope
+— or a second link opened in the same session window — can never
+re-attribute a visit. That join is what makes a link worth having: the
+console shows that Jane's link produced a session that read six pages,
+spent four minutes and copied the email address.
+
+### Forwarding, stated as evidence
+
+- **Readers** = `COUNT(DISTINCT sessions.vid)` over the non-bot sessions
+  carrying the token. It reuses the visitor identity the tracker already
+  mints instead of inventing a second one, and it excludes preview bots for
+  free — they have no `vid` at all.
+- **FORWARDED** is shown when a link has more than one distinct reader, or
+  opens from more than one organisation.
+
+It renders as `FORWARDED // 3 PEOPLE · 2 ORGS`, never as a bare verdict,
+and the console never puts a name on anyone but the labelled recipient.
+**What this cannot tell you**, stated plainly on the page and here:
+
+- *who* the extra readers are — only their organisation, country and
+  device;
+- one person on a laptop and a phone is indistinguishable from two people
+  (two `vid`s), and one person clearing cookies is another;
+- a reader who never runs JavaScript (opt-out, GPC honoured, a text
+  browser) is an `opens` count with no reader behind it;
+- an unfurl proves the link reached a platform, not that a human saw it;
+- a link forwarded and never opened leaves no trace whatsoever.
+
+Revoking a link (`POST /api/ops/share/:token/revoke`) does **not** stop the
+capture — a retired link that keeps being opened is itself the signal. The
+console marks it REVOKED and keeps counting.
+
+### Retention
+
+`share_hits` is pruned with the side tables
+(`NUXT_SIDE_TABLE_RETENTION_DAYS`, 365 by default) by step 8b of the
+nightly run, banded on its own `ts`. `share_links` rows are never pruned:
+a link outlives its evidence. The footer's privacy notice says a link may
+carry a code identifying who it was sent to and that opening it is
+recorded.
 
 ## Trying it locally
 

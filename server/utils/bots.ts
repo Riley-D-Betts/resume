@@ -2,8 +2,12 @@ import type { H3Event } from 'h3'
 import { getDb } from './db.ts'
 import { HONEYPOT_CHECK_SQL } from './collectSql.ts'
 
+// `facebookexternalhit`, `whatsapp`, `mastodon` and `pagerenderer` carry no
+// `bot` / `crawl` / `preview` token of their own, so every one of them used to
+// pass as a human browser. They are named preview fetchers
+// (server/utils/previewAgents.ts) and automation either way.
 const BOT_RE
-  = /bot|crawl|spider|slurp|headless|lighthouse|preview|monitor|python|curl|wget|scrapy|httpclient|node-fetch|axios/i
+  = /bot|crawl|spider|slurp|headless|lighthouse|preview|monitor|python|curl|wget|scrapy|httpclient|node-fetch|axios|facebookexternalhit|whatsapp|mastodon|pagerenderer/i
 
 /** Empty UA or anything matching the crawler/tooling wordlist counts as a bot. */
 export function isBotUA(ua: string | null | undefined): boolean {

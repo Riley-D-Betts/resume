@@ -768,7 +768,7 @@ export const resume: ResumeContent = {
     ],
     footer: '© 2026 Riley Betts · Built with Nuxt · A résumé wearing a Bettsuite costume · No templates harmed',
     privacyNotice:
-      'This site runs first-party analytics, including session replay, stored in my own Cloudflare account. No third-party trackers. Add ?optout=1 to any URL to opt out.',
+      'This site runs first-party analytics, including session replay, stored in my own Cloudflare account. A link I send you may carry a short code identifying who I sent it to, and opening that link is recorded. No third-party trackers. Add ?optout=1 to any URL to opt out.',
   },
 
   colophon: {

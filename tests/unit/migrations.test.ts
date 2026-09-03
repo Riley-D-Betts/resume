@@ -1,4 +1,4 @@
-// Applies migrations/0001 → 0002 → 0003 to an in-memory SQLite (the engine
+// Applies every migration in order to an in-memory SQLite (the engine
 // under D1) with foreign keys enforced, the way D1 does. Pins the contract
 // rules from §C.4: 0002 re-applies cleanly, every table stays under D1's
 // 100-column cap, every FK child column is indexed (a parent delete must never
@@ -139,14 +139,15 @@ INSERT INTO t VALUES ('it''s;'); -- trailing; comment
   assert.deepEqual(parts, ["CREATE TABLE t (a TEXT DEFAULT 'x;y')", "INSERT INTO t VALUES ('it''s;')"])
 })
 
-test('exactly the four migration files exist, numbered 0001..0004', () => {
+test('exactly the five migration files exist, numbered 0001..0005', () => {
   assert.deepEqual(
     files.map((f) => f.slice(0, 4)),
-    ['0001', '0002', '0003', '0004'],
+    ['0001', '0002', '0003', '0004', '0005'],
   )
   assert.equal(files[1], '0002_side_tables.sql')
   assert.equal(files[2], '0003_session_columns.sql')
   assert.equal(files[3], '0004_export_indexes.sql')
+  assert.equal(files[4], '0005_share_links.sql')
 })
 
 test('0004 creates the two export keyset indexes', () => {
@@ -159,7 +160,28 @@ test('0004 creates the two export keyset indexes', () => {
   db.close()
 })
 
-test('0001 → 0004 apply on a fresh database with foreign keys on', () => {
+test('0005 adds the share tables, their indexes and session_net.share_token', () => {
+  const db = migrated()
+  assert.ok(columns(db, 'share_links').includes('revoked'), 'share_links.revoked missing')
+  assert.deepEqual(columns(db, 'share_hits'), ['id', 'token', 'ts', 'kind', 'agent', 'as_org', 'country', 'referrer_host', 'path'])
+  assert.ok(columns(db, 'session_net').includes('share_token'), 'session_net.share_token missing')
+  const idx = db
+    .prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('idx_share_hits_token_ts', 'idx_share_hits_ts', 'idx_session_net_share') ORDER BY name",
+    )
+    .all()
+    .map((r: { name: string }) => r.name)
+  assert.deepEqual(idx, ['idx_session_net_share', 'idx_share_hits_token_ts', 'idx_share_hits_ts'])
+  // A hit can only exist for a minted link, and it dies with it.
+  assert.throws(() => db.prepare("INSERT INTO share_hits (token, ts, kind) VALUES ('zzzz', 1, 'view')").run(), /FOREIGN KEY/)
+  db.prepare("INSERT INTO share_links (token, label, created_at) VALUES ('7fq2', 'Jane', 1)").run()
+  db.prepare("INSERT INTO share_hits (token, ts, kind, agent) VALUES ('7fq2', 2, 'unfurl', 'Slack')").run()
+  db.prepare("DELETE FROM share_links WHERE token = '7fq2'").run()
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM share_hits').get() as Row).n, 0, 'cascade')
+  db.close()
+})
+
+test('0001 → 0005 apply on a fresh database with foreign keys on', () => {
   const db = migrated()
   const names = tables(db)
   for (const t of [
@@ -176,6 +198,8 @@ test('0001 → 0004 apply on a fresh database with foreign keys on', () => {
     'page_perf',
     'rdns_cache',
     'login_attempts',
+    'share_links',
+    'share_hits',
   ]) {
     assert.ok(names.includes(t), `missing table ${t}`)
   }
@@ -305,6 +329,12 @@ test('deleting a session never scans a child table; replay_chunks_v2 by sid uses
     (r) => r.detail as string,
   )
   assert.ok(byId.some((l) => /SEARCH replay_chunks_v2 USING .*sqlite_autoindex_replay_chunks_v2_1 \(sid=\?\)/.test(l)), byId.join(' | '))
+  // share_hits is a child of share_links, NOT of sessions, so its cascade is
+  // exercised on its own parent — same rule: never a full scan.
+  const sharePlan = all(db, 'EXPLAIN QUERY PLAN DELETE FROM share_links WHERE token = ?').map((r) => r.detail as string)
+  for (const line of sharePlan) assert.doesNotMatch(line, /^SCAN /, `full scan in cascade: ${line}`)
+  assert.ok(sharePlan.some((l) => l.startsWith('SEARCH share_hits ')), `no SEARCH on share_hits in: ${sharePlan.join(' | ')}`)
+
   const legacyDropped = all(db, "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_sessions_vid'")
   assert.equal(legacyDropped.length, 0, 'idx_sessions_vid should be superseded by idx_sessions_vid_started')
   db.close()
