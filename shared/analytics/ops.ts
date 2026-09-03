@@ -232,6 +232,8 @@ export interface SessionNetRow {
   client_tz_offset_min: number | null
   cf_tz_offset_min: number | null
   rdns_host: string | null
+  /** The share link the visit arrived on (`?k=`), first write wins. */
+  share_token: string | null
 }
 
 export interface SessionEnvRow {
@@ -977,4 +979,89 @@ export interface ReplaySegments {
 /** 422 body of `/api/ops/replay/[id]` when the inflate budget is exceeded. */
 export interface ReplayError {
   error: string
+}
+
+// ---------------------------------------------------------------------------
+// Share links (/api/ops/share/**)
+// ---------------------------------------------------------------------------
+
+/** What a share_hits row recorded: a person, a named preview bot, other automation. */
+export type ShareHitKind = 'view' | 'unfurl' | 'bot'
+
+/** One minted link with its rollups. */
+export interface ShareLinkRow {
+  token: string
+  /** Who the owner said he sent it to — the ONLY named identity in this feature. */
+  label: string
+  note: string | null
+  channel: string | null
+  createdAt: number
+  revoked: boolean
+  /** The absolute link to send. */
+  url: string
+  /** share_hits rows of every kind. */
+  opens: number
+  /** kind = 'view' — a browser, not a preview bot. */
+  views: number
+  /** kind = 'unfurl' — the link was pasted somewhere that generated a preview. */
+  unfurls: number
+  /** kind = 'bot' — automation that no table can name. */
+  bots: number
+  /** DISTINCT sessions.vid among sessions carrying the token: the reader count. */
+  readers: number
+  /** Sessions attributed through session_net.share_token. */
+  sessions: number
+  /** ≤ 10 each, from the hits. */
+  orgs: string[]
+  countries: string[]
+  /** Platforms that unfurled it (Slack, LinkedIn, …). */
+  platforms: string[]
+  firstHit: number | null
+  lastHit: number | null
+  /** readers > 1 OR orgs > 1 — rendered as evidence, never as a bare verdict. */
+  forwarded: boolean
+}
+
+export interface ShareLinks {
+  links: ShareLinkRow[]
+  /** Origin the console builds link URLs from (this request's). */
+  origin: string
+}
+
+/** One recorded document request carrying a link. No IP, no raw user agent. */
+export interface ShareHitRow {
+  id: number
+  ts: number
+  kind: ShareHitKind
+  /** Platform name for an unfurl, else null. */
+  agent: string | null
+  as_org: string | null
+  country: string | null
+  referrer_host: string | null
+  path: string | null
+}
+
+export interface ShareLinkDetail {
+  link: ShareLinkRow
+  /** Newest first, ≤ 200. */
+  hits: ShareHitRow[]
+  /** Sessions carrying the token, newest first, ≤ 100. */
+  sessions: SessionRow[]
+}
+
+/** POST body of `/api/ops/share`. */
+export interface ShareMintRequest {
+  label: string
+  note?: string
+  channel?: string
+}
+
+export interface ShareMintResult {
+  token: string
+  url: string
+}
+
+export interface ShareRevokeResult {
+  token: string
+  revoked: boolean
 }

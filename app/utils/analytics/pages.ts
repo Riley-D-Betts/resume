@@ -16,8 +16,13 @@ const HEARTBEAT_MS = 15_000
 const INPUT_IDLE_MS = 30_000
 const NAV_FALLBACK_MS = 3_000
 const RESIZE_DEBOUNCE_MS = 400
+/** A `pageshow` this close behind a rotation is the same restore (L6). */
+const RESTORE_DEDUPE_MS = 50
 /** Kinds that describe a real document load and therefore carry the document facts. */
 const DOC_KINDS = new Set<NavKind>(['initial', 'reload', 'back_forward', 'prerender'])
+
+/** The admin console is never part of the public dataset (B17 / L5). */
+const isOps = (path: string): boolean => path.startsWith('/ops')
 
 export interface Visit {
   pvid: string
@@ -49,6 +54,23 @@ export interface Pages {
   visit: () => Visit
   /** Called by the `__rbTrack` bridge for every `form` step so `abandon` can be derived on leave. */
   noteForm: (p: unknown) => void
+  /** Runs when a visit ends (navigation, pagehide, rotation) — interactions.ts closes an open hover (L3). */
+  onVisitEnd: (cb: () => void) => void
+}
+
+/** One `pageview` / visit opening. */
+interface StartVisitOpts {
+  path: string
+  kind: NavKind
+  pvid: string
+  from: string | null
+  softNavMs?: number
+  /** SSR document-request facts (§B.8); only carried by a document-load pageview. */
+  nav?: DocFacts | null
+  /** Carry the document facts on a kind that normally omits them (M3: a bfcache restore that minted a sid). */
+  facts?: boolean
+  /** A rotation: device facts, but no referrer / campaign — that attribution closed with the old session (L8). */
+  fresh?: boolean
 }
 
 export interface PagesDeps {
@@ -105,12 +127,18 @@ function makeVisit(path: string, pvid: string): Visit {
   }
 }
 
-/** Initial-document fields of a `pageview` (contract PageviewP; A31 = `path` captured at init). */
-function docFacts(nav: DocFacts | null): Partial<PageviewP> {
+/**
+ * Initial-document fields of a `pageview` (contract PageviewP; A31 = `path`
+ * captured at init). `fresh` marks a session rotation: the device facts still
+ * describe this browser, but the referrer and the campaign parameters brought
+ * the session that just closed — replaying them would credit the new session
+ * to an arrival it never had (L8).
+ */
+function docFacts(nav: DocFacts | null, fresh = false): Partial<PageviewP> {
   const params = new URLSearchParams(location.search)
-  const get = (k: string): string | null => params.get(k)?.slice(0, 200) ?? null
+  const get = (k: string): string | null => (fresh ? null : (params.get(k)?.slice(0, 200) ?? null))
   return {
-    referrer: document.referrer.slice(0, 300),
+    referrer: fresh ? '' : document.referrer.slice(0, 300),
     utm: {
       source: get('utm_source'),
       medium: get('utm_medium'),
@@ -283,22 +311,17 @@ export function setupPages(deps: PagesDeps): Pages {
   }
 
   // -- visits --------------------------------------------------------------
-  const startVisit = (
-    path: string,
-    kind: NavKind,
-    pvid: string,
-    from: string | null,
-    softNavMs?: number,
-    nav: DocFacts | null = null,
-  ): void => {
-    current = makeVisit(path, pvid)
+  const visitEndCbs: Array<() => void> = []
+
+  const startVisit = (o: StartVisitOpts): void => {
+    current = makeVisit(o.path, o.pvid)
     core.resetPageCaps()
-    core.path = path
+    core.path = o.path
     lastAccrueAt = Date.now()
     armed = false
-    const p: PageviewP = { pvid, path, from, kind }
-    if (softNavMs !== undefined) p.softNavMs = softNavMs
-    if (DOC_KINDS.has(kind)) Object.assign(p, docFacts(nav))
+    const p: PageviewP = { pvid: o.pvid, path: o.path, from: o.from, kind: o.kind }
+    if (o.softNavMs !== undefined) p.softNavMs = o.softNavMs
+    if (o.facts === true || DOC_KINDS.has(o.kind)) Object.assign(p, docFacts(o.nav ?? null, o.fresh === true))
     track('pageview', null, p)
   }
 
@@ -306,6 +329,11 @@ export function setupPages(deps: PagesDeps): Pages {
     if (v.leaveSent) return
     v.leaveSent = true
     accrue()
+    for (const cb of visitEndCbs) safe(cb)()
+    // L5: a visit opened while the router sat on /ops is admin traffic and
+    // never reaches the public dataset (its events are dropped while paused,
+    // but this one would be emitted after the router left /ops again).
+    if (isOps(v.path)) return
     if (v.formStarted && !v.formSubmitted) {
       track('form', null, { step: 'abandon', msSinceFocus: Math.max(0, Math.round(Date.now() - v.formFocusAt)) })
     }
@@ -332,34 +360,53 @@ export function setupPages(deps: PagesDeps): Pages {
   }
 
   // Initial pageview: queued immediately so a bounce before mount still lands (A31).
-  startVisit(location.pathname, navType(), docPvid, null, undefined, deps.nav)
+  startVisit({ path: location.pathname, kind: navType(), pvid: docPvid, from: null, nav: deps.nav })
 
-  // A5: the sid cookie expired or another tab holds a different sid → new session, new visit.
+  // A5: the sid cookie expired or another tab holds a different sid → new
+  // session, new visit. M1: the visit that is being closed still belongs to the
+  // old session, so its exits and its page_leave are emitted first — core then
+  // drains the queue under the old sid before adopting the new one.
+  let rotatedAt = -Infinity
+  core.onBeforeRotate(() => {
+    sections.forceExit()
+    emitLeave(current, 'unload')
+  })
   core.onRotate(() => {
+    rotatedAt = Date.now()
     sections.reset()
-    startVisit(location.pathname, 'reload', crypto.randomUUID(), null, undefined, null)
+    startVisit({ path: location.pathname, kind: 'reload', pvid: crypto.randomUUID(), from: null, fresh: true })
     settle()
   })
 
   // -- router (K1) -----------------------------------------------------------
-  let pendingNav: { from: string; to: string; startedAt: number; kind: 'spa' | 'spa_back' } | null = null
+  let pendingNav: { from: string | null; to: string; startedAt: number; kind: 'spa' | 'spa_back' } | null = null
   let popstateFlag = false
   let navStartAt = 0
   let fallbackTimer: number | undefined
 
   const finishNav = safe((): void => {
     clearTimeout(fallbackTimer)
-    if (pendingNav) {
-      const n = pendingNav
-      pendingNav = null
-      startVisit(n.to, n.kind, crypto.randomUUID(), n.from, Math.max(0, Math.round(performance.now() - n.startedAt)))
+    const n = pendingNav
+    pendingNav = null
+    // M1: a rotation that came due during the navigation is applied here, on
+    // the settled path — the rotation callback opens the visit for the new
+    // page, so the SPA pageview would be a duplicate.
+    if (core.ensureSid()) return
+    if (n) {
+      startVisit({
+        path: n.to,
+        kind: n.kind,
+        pvid: crypto.randomUUID(),
+        from: n.from,
+        softNavMs: Math.max(0, Math.round(performance.now() - n.startedAt)),
+      })
     }
     settle()
   })
 
   router.beforeEach((to, from) => {
     try {
-      core.paused = to.path.startsWith('/ops')
+      core.paused = isOps(to.path)
       if (to.path !== from.path) navStartAt = performance.now()
     } catch {
       /* ignore */
@@ -368,22 +415,31 @@ export function setupPages(deps: PagesDeps): Pages {
 
   router.afterEach((to, from, failure) => {
     try {
+      // L1: the popstate flag describes THIS navigation; a navigation that
+      // never reaches the body below must not hand it to the next one.
+      const back = popstateFlag
+      popstateFlag = false
       // Nuxt runs the initial router.replace after user plugins register guards.
       if (failure || from === START_LOCATION || from.matched.length === 0 || to.path === from.path) return
+      // L2: the old document is still on screen until the new page settles —
+      // a scroll in between would measure it against the new path.
+      armed = false
       const toPaused = core.paused
       core.paused = false
       sections.forceExit()
       emitLeave(current, 'spa')
-      core.flush('timer')
+      // M1: `rotate: false` — a rotation here would emit a second pageview for
+      // the page finishNav is about to open. finishNav applies it instead.
+      core.flush('timer', { rotate: false })
       core.paused = toPaused
       if (toPaused) return
       pendingNav = {
-        from: from.path,
+        // L5: /ops is not a public referrer.
+        from: isOps(from.path) ? null : from.path,
         to: to.path,
         startedAt: navStartAt || performance.now(),
-        kind: popstateFlag ? 'spa_back' : 'spa',
+        kind: back ? 'spa_back' : 'spa',
       }
-      popstateFlag = false
       core.path = to.path
       clearTimeout(fallbackTimer)
       fallbackTimer = window.setTimeout(finishNav, NAV_FALLBACK_MS)
@@ -414,9 +470,21 @@ export function setupPages(deps: PagesDeps): Pages {
       lastInputAt = now
       lastAccrueAt = now
       stateSince = now
-      core.ensureSid(false)
+      // M3: a restore after the cookie expired mints a new sid — that session
+      // has no document load of its own, so this pageview carries the facts.
+      const rotated = core.ensureSid(false)
+      // L6: a visibility change on the same restore may already have rotated
+      // and opened this visit; do not open a second one for it.
+      if (!rotated && Date.now() - rotatedAt < RESTORE_DEDUPE_MS && current.path === location.pathname) return
       sections.reset()
-      startVisit(location.pathname, 'bfcache', crypto.randomUUID(), null)
+      startVisit({
+        path: location.pathname,
+        kind: 'bfcache',
+        pvid: crypto.randomUUID(),
+        from: null,
+        nav: rotated ? deps.nav : null,
+        facts: rotated,
+      })
       settle()
     }),
   )
@@ -482,6 +550,9 @@ export function setupPages(deps: PagesDeps): Pages {
   return {
     docPvid,
     visit: () => current,
+    onVisitEnd(cb) {
+      visitEndCbs.push(cb)
+    },
     noteForm(p) {
       const step = (p as Partial<FormP> | undefined)?.step
       if (step === 'focus' && !current.formStarted) {

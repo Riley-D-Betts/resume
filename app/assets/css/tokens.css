@@ -78,4 +78,6 @@
   --z-boot: 100;
   --z-scanlines: 90;
   --z-cursor: 110;
+  /** above the CRT overlay: the replay player filling the screen */
+  --z-modal: 120;
 }

@@ -1,5 +1,6 @@
 // Shared helper for the WP4 unit tests: an in-memory SQLite migrated
-// 0001 → 0002 → 0003 with foreign keys on (the engine under D1). The statement
+// every numbered migration in order, with foreign keys on (the engine under
+// D1). The statement
 // splitter is copied from migrations.test.ts (importing a test file would
 // register its tests twice). Not a test file itself (no `.test.ts`).
 import { readdirSync, readFileSync } from 'node:fs'
@@ -61,7 +62,7 @@ export function splitStatements(sql: string): string[] {
   return out
 }
 
-/** Fresh `:memory:` database with 0001..0003 applied and PRAGMA foreign_keys = ON. */
+/** Fresh `:memory:` database with every migration applied and PRAGMA foreign_keys = ON. */
 export function migratedDb(): DatabaseSync {
   const db = new DatabaseSync(':memory:')
   db.exec('PRAGMA foreign_keys = ON')

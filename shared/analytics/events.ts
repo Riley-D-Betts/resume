@@ -296,7 +296,8 @@ export interface PerfNav {
   response: number
   domInteractive: number
   dcl: number
-  load: number
+  /** null when perf is forced before the load event has fired. */
+  load: number | null
   transfer: number
   encoded: number
   decoded: number

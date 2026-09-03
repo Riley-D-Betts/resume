@@ -13,7 +13,7 @@
 export const COLLECT_PARAM_COUNTS = {
   visitors: 13,
   sessions: 70,
-  session_net: 39,
+  session_net: 40,
   session_env: 62,
   page_visits: 19,
   page_perf: 38,
@@ -160,10 +160,12 @@ ${SESSION_UA_UPGRADE},
 ${SESSION_FIRST_NON_NULL.map((c) => `  ${c} = COALESCE(sessions.${c}, excluded.${c})`).join(',\n')}`
 
 // ---------------------------------------------------------------------------
-// ③ session_net Statement B — 39 params (= the 39 columns, in table order).
-// cf / header columns are insert-only; the SSR handoff, the client tz offset
-// and the rDNS host are first-write (COALESCE(session_net.col, excluded.col))
-// because they can arrive on a later envelope or a later PTR answer.
+// ③ session_net Statement B — 40 params (= the 40 columns, in table order).
+// cf / header columns are insert-only; the SSR handoff, the client tz offset,
+// the rDNS host and the share token are first-write
+// (COALESCE(session_net.col, excluded.col)) because they can arrive on a later
+// envelope, a later PTR answer — and, for share_token, because a later
+// envelope must never overwrite the link that actually opened the session.
 // ---------------------------------------------------------------------------
 
 export const SESSION_NET_COLUMNS = [
@@ -177,11 +179,12 @@ export const SESSION_NET_COLUMNS = [
   'fetch_site', 'fetch_mode', 'fetch_dest', 'fetch_user', 'doc_referer', 'early_data',
   'client_tz_offset_min', 'cf_tz_offset_min',
   'rdns_host',
+  'share_token',
 ] as const
 
 const NET_FIRST_WRITE = [
   'fetch_site', 'fetch_mode', 'fetch_dest', 'fetch_user', 'doc_referer', 'early_data',
-  'client_tz_offset_min', 'cf_tz_offset_min', 'rdns_host',
+  'client_tz_offset_min', 'cf_tz_offset_min', 'rdns_host', 'share_token',
 ] as const
 
 export const SESSION_NET_SQL = `INSERT INTO session_net (${SESSION_NET_COLUMNS.join(', ')})

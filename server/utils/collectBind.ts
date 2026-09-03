@@ -26,6 +26,8 @@ export interface CollectFacts {
   /** `offsetMin(cf.cfTz, now)`. */
   cfTzOffsetMin: number | null
   rdnsHost: string | null
+  /** The `rb_k` cookie the share-capture middleware set, or null. */
+  shareToken: string | null
 }
 
 export interface CollectBinds {
@@ -33,7 +35,7 @@ export interface CollectBinds {
   visitors: unknown[]
   /** 70 params (COLLECT_SESSION_COLUMNS order). */
   session: unknown[]
-  /** 39 params (SESSION_NET_COLUMNS order). */
+  /** 40 params (SESSION_NET_COLUMNS order). */
   net: unknown[]
   /** 62 params (SESSION_ENV_COLUMNS order) or null when the envelope carried no env. */
   env: unknown[] | null
@@ -94,6 +96,7 @@ export function buildCollectBinds(parsed: ParsedEnvelope, f: CollectFacts): Coll
     df?.referer ?? null, df ? (df.earlyData ? 1 : 0) : null,
     parsed.clientTzOffsetMin, f.cfTzOffsetMin,
     f.rdnsHost,
+    f.shareToken,
   ]
 
   const envRow = parsed.env

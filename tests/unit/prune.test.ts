@@ -167,3 +167,40 @@ test('the anchor queries run on the migrated schema and advance as rows are dele
   assert.ok((db.prepare('SELECT COUNT(*) AS n FROM page_perf').get() as { n: number }).n > 0, 'rows inside retention survive')
   db.close()
 })
+
+// The share-link step (8b): same anchored walk, banded on share_hits.ts, and
+// share_links rows are never pruned — a link outlives its evidence.
+const SHARE_ANCHOR = 'SELECT MIN(ts) AS oldest FROM share_hits WHERE ts < ?'
+const SHARE_BAND = 'DELETE FROM share_hits WHERE ts >= ? AND ts < ?'
+
+test('share_hits drains by band while share_links survives', () => {
+  const db = migratedDb()
+  const now = 1_800_000_000_000
+  const cutoff = now - 365 * DAY
+  db.prepare("INSERT INTO share_links (token, label, created_at) VALUES ('7fq2', 'Jane Okafor — Acme', ?)").run(now - 500 * DAY)
+
+  // Nothing stale yet: the anchor is null and the plan is empty.
+  assert.equal((db.prepare(SHARE_ANCHOR).get(cutoff) as { oldest: number | null }).oldest, null)
+
+  // One hit every 5 days from 500 days ago to 5 days ago.
+  for (let d = 0; d < 100; d++) {
+    const ts = now - (500 - d * 5) * DAY
+    db.prepare("INSERT INTO share_hits (token, ts, kind, agent) VALUES ('7fq2', ?, 'view', NULL)").run(ts)
+  }
+  const stale = (db.prepare('SELECT COUNT(*) AS n FROM share_hits WHERE ts < ?').get(cutoff) as { n: number }).n
+  assert.ok(stale > 0, 'fixture has stale hits')
+  assert.equal((db.prepare(SHARE_ANCHOR).get(cutoff) as { oldest: number }).oldest, now - 500 * DAY, 'anchored on its own ts column')
+
+  let nights = 0
+  for (; nights < 40; nights++) {
+    const anchor = (db.prepare(SHARE_ANCHOR).get(cutoff) as { oldest: number | null }).oldest
+    const plan = planPruneBands(anchor, cutoff, MAX_BANDS, BAND)
+    if (plan.length === 0) break
+    for (const { lo, hi } of plan) db.prepare(SHARE_BAND).run(lo, hi)
+  }
+  assert.ok(nights > 1, 'a 135-day backlog takes more than one night')
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM share_hits WHERE ts < ?').get(cutoff) as { n: number }).n, 0)
+  assert.ok((db.prepare('SELECT COUNT(*) AS n FROM share_hits').get() as { n: number }).n > 0, 'hits inside retention survive')
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM share_links').get() as { n: number }).n, 1, 'the link itself is never pruned')
+  db.close()
+})

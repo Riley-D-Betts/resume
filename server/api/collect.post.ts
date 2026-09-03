@@ -22,6 +22,7 @@ import { parseUA } from '../utils/ua'
 import { offsetMin } from '../utils/tz'
 import { cachedRdns, rdnsApplies, scheduleRdns } from '../utils/rdns'
 import { rateLimitKey } from '../utils/ratelimit'
+import { SHARE_COOKIE, isShareToken } from '../utils/share'
 import { setReplayTokenCookie } from '../utils/replayAuth'
 
 /**
@@ -95,6 +96,11 @@ export default defineEventHandler(async (event) => {
   const storeIp = getStorageIp(event)
   const ua = normalizeUa(getHeader(event, 'user-agent')) || null
   const cf = readCf(event)
+  // The share link that opened this browser, set by
+  // server/middleware/share-capture.ts on the document request. First write
+  // wins in Statement B, so a later envelope can never overwrite it.
+  const shareCookie = getCookie(event, SHARE_COOKIE)
+  const shareToken = isShareToken(shareCookie) ? shareCookie : null
 
   let mintReplayToken = false
   try {
@@ -171,6 +177,7 @@ export default defineEventHandler(async (event) => {
       rows,
       cfTzOffsetMin: offsetMin(cf.cfTz, now),
       rdnsHost,
+      shareToken,
     })
 
     const statements: ReturnType<typeof bindChecked>[] = []
@@ -181,9 +188,9 @@ export default defineEventHandler(async (event) => {
     statements.push(bindChecked(db, VISITORS_SQL, binds.visitors, 'visitors'))
     // ② sessions Statement A (70 params).
     statements.push(bindChecked(db, SESSION_SQL, binds.session, 'sessions'))
-    // ③ session_net Statement B (39 params) — first envelope, or whenever the
-    //    SSR handoff / client tz offset arrives later.
-    if (!sessionExists || parsed.docFacts || parsed.clientTzOffsetMin !== null) {
+    // ③ session_net Statement B (40 params) — first envelope, or whenever the
+    //    SSR handoff / client tz offset / share token arrives later.
+    if (!sessionExists || parsed.docFacts || parsed.clientTzOffsetMin !== null || shareToken !== null) {
       statements.push(bindChecked(db, SESSION_NET_SQL, binds.net, 'session_net'))
     }
     // Bot sessions (D25): session + network facts only.

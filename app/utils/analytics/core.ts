@@ -29,6 +29,46 @@ const ID_RE = /^[0-9a-fA-F-]{16,64}$/
 const ESSENTIAL = new Set<string>(ESSENTIAL_TYPES)
 const TYPES = new Set<string>(EVENT_TYPES)
 
+/**
+ * Types the ingest merges into typed tables instead of storing as `events`
+ * rows (`store = false` in server/utils/sanitize.ts): heartbeats into
+ * `page_visits`, `env` into `session_env`, vitals / perf into `page_perf`.
+ */
+export const MERGED_TYPES = ['heartbeat', 'env', 'vitals', 'perf'] as const
+const MERGED = new Set<string>(MERGED_TYPES)
+
+/**
+ * True when the ingest stores this type as an `events` row — only those spend
+ * the per-session row budget (H3). A thirty-minute read would otherwise burn a
+ * quarter of the budget on heartbeats alone and silently stop sending copies,
+ * prints and section dwell.
+ */
+export function isRowType(type: string): boolean {
+  return TYPES.has(type) && !MERGED.has(type)
+}
+
+/**
+ * `sessionStorage.rb_ev_n` holds `<sid>:<n>`. A count stored under another sid
+ * is the previous session's budget: a new session starts at zero instead of
+ * inheriting a spent (possibly already capped) counter (H4).
+ */
+export function parseEvCount(raw: string | null, sid: string): number {
+  if (raw === null || sid === '') return 0
+  const i = raw.lastIndexOf(':')
+  if (i <= 0 || raw.slice(0, i) !== sid) return 0
+  const n = Number(raw.slice(i + 1))
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0
+}
+
+/** UTF-8 length of a request body, for the keepalive budget (M6). */
+function byteLen(s: string): number {
+  try {
+    return new TextEncoder().encode(s).length
+  } catch {
+    return s.length
+  }
+}
+
 /** Wrap a listener so an analytics bug can never surface to the page. */
 export function safe<A extends unknown[]>(fn: (...args: A) => void): (...args: A) => void {
   return (...args: A) => {
@@ -217,20 +257,28 @@ export interface Core {
   path: string
   track: Track
   /**
-   * `'timer'` (default): plain fetch, re-queued once on rejection, sid re-read
-   * first (A5). `'keepalive'`: keepalive fetch — an outbound click may unload
-   * the page but the response can still ack. `'beacon'`: sendBeacon first,
+   * `'timer'` (default): plain fetch, re-queued once on rejection or a
+   * transient status, sid re-read first (A5) unless `rotate: false` — the
+   * router's `afterEach` passes that so a rotation never lands mid-navigation
+   * (M1). `'keepalive'`: keepalive fetch — an outbound click may unload the
+   * page but the response can still ack. `'beacon'`: sendBeacon first,
    * keepalive fetch as fallback (hidden / pagehide). Lifecycle modes never
    * rotate the sid: their events belong to the session that produced them.
    */
-  flush: (mode?: FlushMode) => void
+  flush: (mode?: FlushMode, opts?: { rotate?: boolean }) => void
   /**
-   * Re-read the sid cookie. Gone or different → adopt / mint, `returning = true`,
-   * reset the per-session budget and (unless `startVisit === false`) run the
-   * rotation callbacks so pages.ts opens a new visit. Always refreshes the cookies.
+   * Re-read the sid cookie. Gone or different → close the old session first
+   * (the before-rotate callbacks emit its `page_leave`), drain the queue under
+   * the OLD sid, then adopt / mint the new one, `returning = true`, reset the
+   * per-session budget and (unless `startVisit === false`) run the rotation
+   * callbacks so pages.ts opens a new visit. Always refreshes the cookies.
    */
   ensureSid: (startVisit?: boolean) => boolean
+  /** Runs while the closing session is still current: `page_leave`, section exits (M1). */
+  onBeforeRotate: (cb: () => void) => void
   onRotate: (cb: () => void) => void
+  /** Bytes the last lifecycle flush put on the wire — the replay tail shares that quota (M6). */
+  keepaliveBytes: () => number
   /** Per-visit PAGE_CAPS counters start over (called by pages.ts for every visit). */
   resetPageCaps: () => void
   /** Resolves once a /api/collect flush for the current sid completed 2xx (the replay token cookie exists then). */
@@ -284,23 +332,44 @@ export function createCore(): Core {
 
   // -- session rotation ----------------------------------------------------
   const rotateCbs: Array<() => void> = []
-  let evN = Number(ssGet('rb_ev_n')) || 0
+  const beforeRotateCbs: Array<() => void> = []
+  let evN = parseEvCount(ssGet('rb_ev_n'), sid)
+
+  const writeEvN = (): void => ssSet('rb_ev_n', `${sid}:${evN}`)
+
+  /** The sid to adopt when the `rb_sid` cookie no longer matches ours, else null (A5). */
+  const nextSid = (): string | null => {
+    const c = readCookie('rb_sid')
+    if (c === sid) return null
+    return c !== null && ID_RE.test(c) ? c : crypto.randomUUID()
+  }
+
+  /** The closing `page_leave` can fill the queue and re-enter flush → ensureSid. */
+  let rotating = false
 
   const ensureSid = (startVisit = true): boolean => {
+    if (rotating) return false
     let rotated = false
+    rotating = true
     try {
-      const c = readCookie('rb_sid')
-      if (c === null || c !== sid) {
-        sid = c !== null && ID_RE.test(c) ? c : crypto.randomUUID()
+      const next = nextSid()
+      if (next !== null) {
+        // M1: the closing session owns its page_leave and everything already
+        // queued — emit and ship both under the OLD sid, then switch.
+        if (startVisit) for (const cb of beforeRotateCbs) safe(cb)()
+        drain('timer')
+        sid = next
         returning = true
         rotated = true
         evN = 0
-        ssSet('rb_ev_n', '0')
+        writeEvN()
         resetAck()
       }
       refreshCookies()
     } catch {
       /* ignore */
+    } finally {
+      rotating = false
     }
     if (rotated && startVisit) for (const cb of rotateCbs) safe(cb)()
     return rotated
@@ -313,6 +382,7 @@ export function createCore(): Core {
   let pageCounts: Partial<Record<EventType, number>> = {}
   let paused = false
   let path = location.pathname
+  let keepaliveBytes = 0
 
   const post = (body: string, keepalive: boolean): Promise<Response> =>
     fetch(COLLECT_URL, { method: 'POST', keepalive, headers: { 'content-type': 'application/json' }, body })
@@ -325,49 +395,66 @@ export function createCore(): Core {
     queue.unshift(...fresh)
   }
 
-  const flush = (mode: FlushMode = 'timer'): void => {
-    try {
-      if (queue.length === 0) return
-      if (mode === 'timer') ensureSid()
-      ssSet('rb_ev_n', String(evN))
-      while (queue.length > 0) {
-        const events = queue.splice(0, ENVELOPE_MAX)
-        const envSid = sid
-        const envelope: WireEnvelope = {
-          v: WIRE_VERSION,
-          vid,
-          sid,
-          returning,
-          url: location.pathname.slice(0, 200),
-          events,
+  /** Ship the queue under the sid we currently hold; never rotates (M1). */
+  const drain = (mode: FlushMode): void => {
+    if (queue.length === 0) return
+    writeEvN()
+    let lifecycleBytes = 0
+    while (queue.length > 0) {
+      const events = queue.splice(0, ENVELOPE_MAX)
+      const envSid = sid
+      const envelope: WireEnvelope = {
+        v: WIRE_VERSION,
+        vid,
+        sid,
+        returning,
+        url: location.pathname.slice(0, 200),
+        events,
+      }
+      const body = JSON.stringify(envelope)
+      if (mode !== 'timer') {
+        lifecycleBytes += byteLen(body)
+        let delivered = false
+        if (mode === 'beacon') {
+          try {
+            delivered =
+              typeof navigator.sendBeacon === 'function' &&
+              navigator.sendBeacon(COLLECT_URL, new Blob([body], { type: 'application/json' }))
+          } catch {
+            delivered = false
+          }
         }
-        const body = JSON.stringify(envelope)
-        if (mode !== 'timer') {
-          let delivered = false
-          if (mode === 'beacon') {
-            try {
-              delivered =
-                typeof navigator.sendBeacon === 'function' &&
-                navigator.sendBeacon(COLLECT_URL, new Blob([body], { type: 'application/json' }))
-            } catch {
-              delivered = false
-            }
-          }
-          if (!delivered) {
-            void post(body, true)
-              .then((r) => {
-                if (r.ok) ack(envSid)
-              })
-              .catch(() => {})
-          }
-        } else {
-          void post(body, false)
+        if (!delivered) {
+          void post(body, true)
             .then((r) => {
               if (r.ok) ack(envSid)
             })
-            .catch(() => requeue(events))
+            .catch(() => {})
         }
+      } else {
+        void post(body, false)
+          .then((r) => {
+            if (r.ok) {
+              ack(envSid)
+              return
+            }
+            // C1: 429 / 5xx are transient — one more try. Every other 4xx is a
+            // verdict on the batch itself and would fail again identically.
+            if (r.status === 429 || r.status >= 500) requeue(events)
+          })
+          .catch(() => requeue(events))
       }
+    }
+    // M6: sendBeacon and keepalive fetch share one 64 KiB quota; the replay
+    // tail has to fit in what this flush left of it.
+    if (mode !== 'timer') keepaliveBytes = lifecycleBytes
+  }
+
+  const flush = (mode: FlushMode = 'timer', opts?: { rotate?: boolean }): void => {
+    try {
+      if (queue.length === 0) return
+      if (mode === 'timer' && opts?.rotate !== false) ensureSid()
+      drain(mode)
     } catch {
       /* never surface */
     }
@@ -382,8 +469,11 @@ export function createCore(): Core {
         if (n > cap) return
         pageCounts[type] = n
       }
-      if (evN >= SESSION_EVENT_CAP && !ESSENTIAL.has(type)) return
-      evN++
+      // H3: only the types the ingest stores as rows spend the session budget.
+      if (isRowType(type)) {
+        if (evN >= SESSION_EVENT_CAP && !ESSENTIAL.has(type)) return
+        evN++
+      }
       const p = rest[0]
       const ev = {
         t: Date.now(),
@@ -435,9 +525,13 @@ export function createCore(): Core {
     track,
     flush,
     ensureSid,
+    onBeforeRotate(cb) {
+      beforeRotateCbs.push(cb)
+    },
     onRotate(cb) {
       rotateCbs.push(cb)
     },
+    keepaliveBytes: () => keepaliveBytes,
     resetPageCaps() {
       pageCounts = {}
     },

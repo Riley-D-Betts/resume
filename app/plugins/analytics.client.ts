@@ -20,7 +20,19 @@ export default defineNuxtPlugin((nuxtApp) => {
       lsSet('rb_optout', '1')
       console.info('[rb] analytics opt-out saved — this browser will not be tracked')
     }
-    if (lsGet('rb_optout')) return
+    if (lsGet('rb_optout')) {
+      // Mirror the flag into a cookie so the SERVER honours it too: the share
+      // capture (server/middleware/share-capture.ts) runs before any of this
+      // and cannot read localStorage. Refreshed on every load, so a browser
+      // that opted out before this existed is covered on its next visit.
+      try {
+        const secure = location.protocol === 'https:' ? '; Secure' : ''
+        document.cookie = `rb_optout=1; path=/; max-age=${365 * 24 * 60 * 60}; SameSite=Lax${secure}`
+      } catch {
+        /* cookies refused: the client-side gate below still holds */
+      }
+      return
+    }
     const config = useRuntimeConfig().public
     if (config.honorGpc && (navigator as Navigator & { globalPrivacyControl?: boolean }).globalPrivacyControl === true) {
       return
@@ -38,11 +50,21 @@ export default defineNuxtPlugin((nuxtApp) => {
     })
 
     // -- pages, sections, interactions, errors ------------------------------
+    const router = useRouter()
+    // L5: the recorder never follows the visitor into the admin console. This
+    // guard is registered before the one setupPages installs, so the tracker is
+    // still unpaused here and `replay_stopped` is actually reported.
+    let stopReplay: ((reason: string) => void) | null = null
+    router.beforeEach(
+      safe((to: { path: string }) => {
+        if (to.path.startsWith('/ops')) stopReplay?.('ops')
+      }),
+    )
     const sections = createSections(core, () => pages!.visit())
     pages = setupPages({
       core,
       nuxtApp,
-      router: useRouter(),
+      router,
       sections,
       nav: useState<DocFacts | null>('rbNav', () => null).value ?? null,
     })
@@ -53,6 +75,8 @@ export default defineNuxtPlugin((nuxtApp) => {
     const rawRate = Number(config.replaySampleRate)
     const replay = setupReplay({
       getSid: () => core.sid,
+      onRotate: core.onRotate,
+      keepaliveBytes: core.keepaliveBytes,
       sampleRate: Number.isFinite(rawRate) ? Math.min(1, Math.max(0, rawRate)) : 0,
       decision: core.replayDecision,
       setDecision: core.setReplayDecision,
@@ -60,6 +84,7 @@ export default defineNuxtPlugin((nuxtApp) => {
       isAcked: core.isAcked,
       track: core.track,
     })
+    stopReplay = replay.stop
     addEventListener(
       'pagehide',
       safe(() => replay.flushTail()),

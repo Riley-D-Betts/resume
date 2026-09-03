@@ -19,14 +19,29 @@ export interface ReplaySegment {
 const props = withDefaults(defineProps<{ sid?: string; segments?: ReplaySegment[] | null }>(), { sid: undefined, segments: null })
 
 const fmt = useOpsFormat()
+const root = ref<HTMLDivElement | null>(null)
 const host = ref<HTMLDivElement | null>(null)
+/** true whenever the player is filling the screen, by either mechanism */
+const full = ref(false)
+/**
+ * iOS Safari on iPhone implements the Fullscreen API on <video> only: a <div>
+ * has no requestFullscreen at all, so rrweb-player's own button is a silent
+ * no-op there. When the real API is missing (or refuses), we fill the viewport
+ * with a fixed overlay instead, which behaves the same to a reader.
+ */
+const overlay = ref(false)
 const state = ref<'loading' | 'ready' | 'empty' | 'error'>('loading')
 // shallowRef: rrweb's event union is huge and never needs deep reactivity
 const segs = shallowRef<ReplaySegment[]>([])
 const selected = ref(0)
 
 // rrweb-player v2 is a Svelte 4 component class: new Player({ target, props })
-let player: { $destroy: () => void } | null = null
+type PlayerInstance = {
+  $destroy: () => void
+  $set: (props: Record<string, unknown>) => void
+  triggerResize: () => void
+}
+let player: PlayerInstance | null = null
 let PlayerCtor: (new (opts: { target: Element; props: Record<string, unknown> }) => unknown) | null = null
 
 function isEvent(v: unknown): v is eventWithTime {
@@ -78,7 +93,89 @@ async function mount() {
       width,
       height: Math.round(width * 0.62),
     },
-  }) as { $destroy: () => void }
+  }) as PlayerInstance
+}
+
+/** The box the player should occupy right now, in CSS pixels. */
+function box(): { width: number; height: number } {
+  const el = host.value
+  const width = Math.max(320, Math.floor(el?.clientWidth || 480))
+  if (!full.value) return { width, height: Math.round(width * 0.62) }
+  // Filling the screen: hand the player the whole measured box and let rrweb
+  // scale the recording inside it (it fits on the tighter of the two axes).
+  return { width, height: Math.max(240, Math.floor(el?.clientHeight || Math.round(width * 0.62))) }
+}
+
+/** Resize in place. `$set` moves the box, `triggerResize` rescales the frame. */
+function fit() {
+  if (!player) return
+  const { width, height } = box()
+  player.$set({ width, height })
+  player.triggerResize()
+}
+
+let fitFrame = 0
+function refit() {
+  cancelAnimationFrame(fitFrame)
+  // two frames: one for the class/fullscreen paint, one to measure it
+  fitFrame = requestAnimationFrame(() => { fitFrame = requestAnimationFrame(fit) })
+}
+
+function nativeFullscreen(el: HTMLElement): (() => Promise<unknown>) | null {
+  const req = el.requestFullscreen ?? (el as { webkitRequestFullscreen?: () => Promise<unknown> }).webkitRequestFullscreen
+  return typeof req === 'function' ? () => req.call(el) : null
+}
+
+function nativeElement(): Element | null {
+  return document.fullscreenElement ?? (document as { webkitFullscreenElement?: Element | null }).webkitFullscreenElement ?? null
+}
+
+async function enterFull() {
+  const el = root.value
+  if (!el) return
+  const req = nativeFullscreen(el)
+  if (req) {
+    try {
+      await req()
+      return // fullscreenchange sets the state
+    } catch {
+      // Safari on iPad can reject; fall through to the overlay
+    }
+  }
+  overlay.value = true
+  full.value = true
+  document.body.style.overflow = 'hidden'
+  refit()
+}
+
+async function exitFull() {
+  if (nativeElement()) {
+    try {
+      await (document.exitFullscreen?.() ?? (document as { webkitExitFullscreen?: () => Promise<unknown> }).webkitExitFullscreen?.())
+    } catch {
+      // ignore: the change handler still reconciles below
+    }
+  }
+  if (overlay.value) {
+    overlay.value = false
+    full.value = false
+    document.body.style.removeProperty('overflow')
+    refit()
+  }
+}
+
+function toggleFull() {
+  void (full.value ? exitFull() : enterFull())
+}
+
+function onFullscreenChange() {
+  if (overlay.value) return
+  full.value = nativeElement() === root.value
+  refit()
+}
+
+function onKey(ev: KeyboardEvent) {
+  if (ev.key === 'Escape' && overlay.value) void exitFull()
 }
 
 async function load() {
@@ -105,7 +202,14 @@ async function load() {
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  void load()
+  document.addEventListener('fullscreenchange', onFullscreenChange)
+  document.addEventListener('webkitfullscreenchange', onFullscreenChange)
+  window.addEventListener('resize', refit)
+  window.addEventListener('orientationchange', refit)
+  document.addEventListener('keydown', onKey)
+})
 watch(() => props.segments, () => void load())
 
 async function pick(i: number) {
@@ -115,7 +219,16 @@ async function pick(i: number) {
   await mount()
 }
 
-onBeforeUnmount(destroy)
+onBeforeUnmount(() => {
+  cancelAnimationFrame(fitFrame)
+  document.removeEventListener('fullscreenchange', onFullscreenChange)
+  document.removeEventListener('webkitfullscreenchange', onFullscreenChange)
+  window.removeEventListener('resize', refit)
+  window.removeEventListener('orientationchange', refit)
+  document.removeEventListener('keydown', onKey)
+  if (overlay.value) document.body.style.removeProperty('overflow')
+  destroy()
+})
 
 function segLabel(s: ReplaySegment, i: number): string {
   return `SEGMENT ${i + 1} / ${segs.value.length} · ${fmt.time(s.startedAt)}`
@@ -123,7 +236,7 @@ function segLabel(s: ReplaySegment, i: number): string {
 </script>
 
 <template>
-  <div class="replay" data-testid="replay-player">
+  <div ref="root" class="replay" :class="{ 'replay--full': full, 'replay--overlay': overlay }" data-testid="replay-player">
     <div v-if="state === 'loading'" class="replay__msg label">... POLLING</div>
     <div v-else-if="state === 'empty'" class="replay__msg label">NO REPLAY CAPTURED</div>
     <div v-else-if="state === 'error'" class="replay__msg replay__msg--err label">REPLAY LINK FAULT</div>
@@ -143,8 +256,13 @@ function segLabel(s: ReplaySegment, i: number): string {
         {{ segLabel(s, i) }}
       </button>
     </div>
-    <div v-if="state === 'ready' && segs[selected]" class="replay__meta label">
-      {{ fmt.full(segs[selected]!.startedAt) }} · {{ segs[selected]!.events.length }} EVENTS · RID {{ segs[selected]!.rid.slice(0, 8) }}
+    <div v-if="state === 'ready' && segs[selected]" class="replay__bar">
+      <div class="replay__meta label">
+        {{ fmt.full(segs[selected]!.startedAt) }} · {{ segs[selected]!.events.length }} EVENTS · RID {{ segs[selected]!.rid.slice(0, 8) }}
+      </div>
+      <button type="button" class="replay__full label" data-testid="replay-fullscreen" :aria-pressed="full" @click="toggleFull">
+        {{ full ? 'EXIT FULL SCREEN' : 'FULL SCREEN' }}
+      </button>
     </div>
     <div ref="host" class="replay__host" />
   </div>
@@ -195,10 +313,63 @@ function segLabel(s: ReplaySegment, i: number): string {
   cursor: default;
 }
 
-.replay__meta {
+.replay__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
   margin-bottom: var(--space-2);
+}
+
+.replay__meta {
+  min-width: 0;
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
+}
+
+.replay__full {
+  flex: none;
+  padding: 2px var(--space-2);
+  border: 1px solid var(--hairline);
+  color: var(--text-dim);
+}
+
+.replay__full:hover {
+  color: var(--teal-hot);
+  border-color: var(--hairline-lit);
+}
+
+/*
+ * Filling the screen. `.replay--overlay` is the fallback for browsers with no
+ * element Fullscreen API (iPhone Safari); `:fullscreen` covers the real thing.
+ * Both give the host a measured box that `fit()` hands to the player.
+ */
+.replay--overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  padding: var(--space-2);
+  padding-bottom: max(var(--space-2), env(safe-area-inset-bottom));
+  background: var(--bg-0);
+}
+
+.replay--full,
+.replay:fullscreen {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-0);
+}
+
+.replay:fullscreen {
+  padding: var(--space-2);
+}
+
+.replay--full .replay__host {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .replay__host {
@@ -235,5 +406,14 @@ function segLabel(s: ReplaySegment, i: number): string {
 
 .replay__host :deep(.switch input[type='checkbox']:checked + label:before) {
   background: var(--teal);
+}
+
+/*
+ * The stock player's own fullscreen button calls requestFullscreen on a div,
+ * which iPhone Safari does not implement, so it silently does nothing there.
+ * Hide it and use the control above, which has a working fallback.
+ */
+.replay__host :deep(.rr-controller__btns button:last-of-type) {
+  display: none;
 }
 </style>
