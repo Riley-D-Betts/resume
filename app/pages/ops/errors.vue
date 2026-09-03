@@ -166,7 +166,7 @@ const isEmpty = computed(() => Boolean(data.value) && (data.value?.groups.length
               <BarRows :rows="selected.paths" key-label="PATH" value-label="N" empty="NO DATA" />
             </div>
           </div>
-          <NuxtLink :to="`/ops/sessions/${selected.sampleSid}`" class="er__link label">SAMPLE SESSION {{ selected.sampleSid.slice(0, 8).toUpperCase() }} &rarr;</NuxtLink>
+          <NuxtLink :to="linkTo(`/ops/sessions/${selected.sampleSid}`)" class="er__link label">SAMPLE SESSION {{ selected.sampleSid.slice(0, 8).toUpperCase() }} &rarr;</NuxtLink>
         </div>
       </Panel>
 

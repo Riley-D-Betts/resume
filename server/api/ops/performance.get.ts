@@ -52,8 +52,9 @@ function baseSql(cols: string, where: WhereParts, extra = ''): string {
   )
 }
 
+/** No sample → nulls, so the page prints `—` instead of a 0 ms GOOD lamp (R4-M1). */
 function emptyP(): Percentiles {
-  return { p50: 0, p75: 0, p95: 0, n: 0 }
+  return { p50: null, p75: null, p95: null, n: 0 }
 }
 
 async function build(event: H3Event, q: OpsQuery): Promise<Performance> {
@@ -148,7 +149,7 @@ async function build(event: H3Event, q: OpsQuery): Promise<Performance> {
   }
 
   const lcpSeries = [...foldPercentiles(at(1) as unknown as PercentileRow[])]
-    .map(([id, pc]) => ({ day: dayIdxToYmd(Number(id.slice(0, id.lastIndexOf(' ')))), p75: pc.p75, n: pc.n }))
+    .map(([id, pc]) => ({ day: dayIdxToYmd(Number(id.slice(0, id.lastIndexOf(' ')))), p75: pc.p75 ?? 0, n: pc.n }))
     .sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0))
 
   const histRows = at(2)
@@ -158,7 +159,14 @@ async function build(event: H3Event, q: OpsQuery): Promise<Performance> {
       .filter((r) => r.metric === h.metric)
       .map((r) => {
         const b = toNum(r.b)
-        return { from: Math.round(b * h.width * 1000) / 1000, to: Math.round((b + 1) * h.width * 1000) / 1000, n: toNum(r.n) }
+        // The top bin is the MIN(…, HIST_MAX_BIN) catch-all: open ended (R4-L6).
+        const overflow = b >= HIST_MAX_BIN
+        return {
+          from: Math.round(b * h.width * 1000) / 1000,
+          to: Math.round((b + 1) * h.width * 1000) / 1000,
+          n: toNum(r.n),
+          ...(overflow ? { overflow: true } : {}),
+        }
       })
       .sort((a, b) => a.from - b.from),
   }))
@@ -167,11 +175,11 @@ async function build(event: H3Event, q: OpsQuery): Promise<Performance> {
   const navBreakdown = NAV_PHASES.map((ph) => ({ phase: ph.phase, p50: nav.get(percentileKey('(all)', ph.phase))?.p50 ?? 0 }))
 
   const lcpElements = [...foldPercentiles(at(4) as unknown as PercentileRow[])]
-    .map(([id, pc]) => ({ sel: id.slice(0, id.lastIndexOf(' ')), n: pc.n, p75: pc.p75 }))
+    .map(([id, pc]) => ({ sel: id.slice(0, id.lastIndexOf(' ')), n: pc.n, p75: pc.p75 ?? 0 }))
     .sort((a, b) => b.n - a.n)
 
   const slowest = [...foldPercentiles(at(5) as unknown as PercentileRow[])]
-    .map(([id, pc]) => ({ name: id.slice(0, id.lastIndexOf(' ')), n: pc.n, p75Ms: Math.round(pc.p75) }))
+    .map(([id, pc]) => ({ name: id.slice(0, id.lastIndexOf(' ')), n: pc.n, p75Ms: Math.round(pc.p75 ?? 0) }))
     .sort((a, b) => b.n - a.n)
 
   const t = res[6]?.[0] ?? {}

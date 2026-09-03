@@ -58,11 +58,13 @@ export default defineNuxtConfig({
     // CSP (audit A27). 'unsafe-inline' is what the Nuxt SPA shell and the
     // rrweb player stylesheet need; everything stays same-origin. Fonts are
     // served from /_fonts by @nuxt/fonts, replay frames are blob: iframes.
+    // frame-ancestors / base-uri / form-action / object-src close the
+    // clickjacking, <base> and form-hijack holes (audit S6).
     '/ops/**': {
       headers: {
         'X-Robots-Tag': 'noindex, nofollow',
         'Content-Security-Policy':
-          "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; frame-src 'self' blob:; font-src 'self' data:",
+          "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; frame-src 'self' blob:; font-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'",
       },
       ssr: false,
     },

@@ -6,8 +6,8 @@
 // or missing chunks are skipped; a rid without its seq 0 (the FullSnapshot)
 // is skipped whole. Takes an object getter so it is testable without R2.
 
-import { LEGACY_RID } from '../../shared/analytics/events.ts'
 import type { ReplaySegment } from '../../shared/analytics/ops.ts'
+import { replayKey } from './replayKeys.ts'
 
 export const CHUNK_INFLATE_BUDGET = 8 * 1024 * 1024
 export const SESSION_INFLATE_BUDGET = 32 * 1024 * 1024
@@ -28,12 +28,6 @@ export class ReplayBudgetError extends Error {
     super(message)
     this.name = 'ReplayBudgetError'
   }
-}
-
-/** R2 key layout: legacy rows keep `replays/<sid>/<00000>`, new rows use `replays/<sid>/<rid>/<00000>`. */
-export function chunkKey(sid: string, rid: string, seq: number, compressed: boolean): string {
-  const file = `${String(seq).padStart(5, '0')}${compressed ? '.json.gz' : '.json'}`
-  return rid === LEGACY_RID ? `replays/${sid}/${file}` : `replays/${sid}/${rid}/${file}`
 }
 
 /** Inflate gzip bytes to text, aborting once more than `maxBytes` came out. */
@@ -116,7 +110,7 @@ export async function stitchReplay(
       }
       read++
       try {
-        const raw = await getObject(chunkKey(sid, rid, chunk.seq, chunk.compressed === 1))
+        const raw = await getObject(replayKey(sid, rid, chunk.seq, chunk.compressed === 1))
         if (!raw) continue
         let text: string
         if (chunk.compressed === 1) {

@@ -38,6 +38,54 @@ test('comments are whitespace: line and block comments pass', () => {
   accept('SELECT 1 /* unterminated block runs to EOF')
 })
 
+test('S3: comments are STRIPPED, so they can neither swallow the wrap nor name a column', () => {
+  // A trailing line comment used to leak into the column name of an
+  // unaliased expression ("1 -- x"); the accepted source is comment-free.
+  const line = accept('SELECT 1 -- x')
+  assert.equal(line.source, 'SELECT 1')
+  assert.equal(line.sql, wrapLimit('SELECT 1'))
+
+  // An unterminated block comment used to swallow the appended `) AS rb_q LIMIT ?`.
+  const open = accept('SELECT 1 /* unterminated')
+  assert.equal(open.source, 'SELECT 1')
+  assert.ok(open.sql.endsWith('LIMIT ?'))
+
+  // Comments INSIDE the statement become one space, never nothing.
+  assert.equal(accept('SELECT/**/1').source, 'SELECT 1')
+  assert.equal(accept('SELECT sid --keep\nFROM sessions').source, 'SELECT sid  \nFROM sessions')
+  // A comment marker inside a string literal is still just text.
+  assert.equal(accept("SELECT '-- not a comment' AS s").source, "SELECT '-- not a comment' AS s")
+  assert.equal(accept("SELECT '/* nor this */' AS s").source, "SELECT '/* nor this */' AS s")
+})
+
+test('S3: a statement that closes a parenthesis it never opened is rejected', () => {
+  const esc = reject('SELECT * FROM sessions) AS x /*')
+  assert.equal(esc.code, 'unbalanced')
+  assert.match(esc.reason, /parenthesis/)
+  assert.equal(reject('SELECT 1) ').code, 'unbalanced')
+  assert.equal(reject('SELECT (1').code, 'unbalanced')
+  accept('SELECT (1 + 2) AS x FROM (SELECT 1)')
+})
+
+test('S5: pragma_* table-valued functions and the page/stat vtabs are off limits', () => {
+  for (const sql of [
+    "SELECT * FROM pragma_table_info('sessions')",
+    "SELECT * FROM PRAGMA_TABLE_LIST",
+    'SELECT * FROM "pragma_database_list"',
+    'SELECT * FROM dbstat',
+    'SELECT * FROM sqlite_dbstat',
+    'SELECT * FROM sqlite_dbpage',
+    'SELECT * FROM [DBSTAT]',
+  ]) {
+    assert.equal(reject(sql).code, 'forbidden', sql)
+  }
+  // The schema browser's own source stays readable, and EXPLAIN still works.
+  accept('SELECT sql FROM sqlite_master')
+  assert.equal(accept('EXPLAIN QUERY PLAN SELECT * FROM sessions').explain, true)
+  // A column that merely starts with the word pragma is fine.
+  accept('SELECT pragmatic FROM sessions')
+})
+
 test('DE/**/LETE lexes as two harmless tokens (SQLite then fails it)', () => {
   const toks = lexSql('DE/**/LETE FROM t')
   assert.ok(Array.isArray(toks))

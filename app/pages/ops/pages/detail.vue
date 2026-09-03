@@ -118,10 +118,15 @@ const visitColumns: DataColumn[] = [
 ]
 const visitRows = computed<Row[]>(() => (data.value?.recent ?? []) as unknown as Row[])
 
+/**
+ * The series is one point per day in range — zero-filled — so it is never
+ * empty for a wide range. NO DATA is "every point is 0 and nothing else
+ * came back" (R4-M8).
+ */
 const isEmpty = computed(() => {
   const d = data.value
   if (!d) return false
-  return d.series.length === 0 && d.recent.length === 0 && d.sections.length === 0 && d.clicks.length === 0
+  return d.series.every(p => p.pageviews === 0) && d.recent.length === 0 && d.sections.length === 0 && d.clicks.length === 0
 })
 </script>
 
@@ -195,7 +200,7 @@ const isEmpty = computed(() => {
             :rows="visitRows"
             row-key="pvid"
             :sort="{ key: 'entered_at', dir: 'desc' }"
-            :row-to="(r: Row) => `/ops/sessions/${String(r.sid)}`"
+            :row-to="(r: Row) => linkTo(`/ops/sessions/${String(r.sid)}`)"
             empty="NO DATA // VISITS"
             dense
             :limit="25"

@@ -39,14 +39,17 @@ const TS_PAST_MS = 7 * 24 * 60 * 60 * 1000
 const TS_FUTURE_MS = 60_000
 
 const ID_RE = /^[0-9a-fA-F-]{16,64}$/
-const PATH_RE = /^\/[^?#\s]*$/
+/** Same-origin pathname: one leading slash (never `//host`), no query / fragment / whitespace. */
+const PATH_RE = /^\/(?!\/)[^?#\s]*$/
+/** A `.` or `..` path segment — traversal that must never reach a stored path (audit R2-L3). */
+const DOT_SEGMENT_RE = /(^|\/)\.\.?(\/|$)/
 const SECTION_RE = /^[a-z0-9._:-]{1,40}$/i
 const HOVER_KEY_RE = /^(email|github|contact-cta|kpi:[a-z0-9-]{1,30})$/
 const RAY_RE = /^[0-9a-f]{16}(-[A-Z]{3})?$/
 const HOST_RE = /^[a-z0-9.\-[\]:]{1,120}$/i
 const MAILTO_TEL_RE = /^(mailto|tel):[^\s]{1,110}$/i
 const RESOURCE_NAME_RE = /^[A-Za-z0-9.-]*\/[^?#\s]*$/
-const EXT_RE = /(chrome|moz|safari-web)-extension:\/\/[a-z0-9-]+/gi
+const EXT_RE = /(chrome|moz|safari-web|ms-browser)-extension:\/\/[a-z0-9-]+/gi
 const EGG_NAMES = new Set(['console', 'konami'])
 const SCROLL_PCTS = new Set([25, 50, 75, 90, 100])
 const NAV_KINDS: readonly NavKind[] = ['initial', 'reload', 'back_forward', 'prerender', 'spa', 'spa_back', 'bfcache']
@@ -73,6 +76,19 @@ export function asInt(v: unknown, min: number, max: number): number | null {
   return Math.min(max, Math.max(min, Math.round(n)))
 }
 
+/**
+ * Integer INSIDE [min, max], else null — the opposite of `asInt`, which clamps
+ * to the nearest edge. Used where an out-of-range value is evidence the field
+ * is junk and the edge would be a lie (tz offsets, soft-nav durations, scroll
+ * percentages — audit R2-L4).
+ */
+export function asIntIn(v: unknown, min: number, max: number): number | null {
+  const n = asNum(v)
+  if (n === null) return null
+  const r = Math.round(n)
+  return r < min || r > max ? null : r
+}
+
 /** Strict boolean → 0/1 for INTEGER columns; anything else → null. */
 export function asBool(v: unknown): 0 | 1 | null {
   if (v === true) return 1
@@ -84,9 +100,14 @@ export function asEnum<T extends string>(v: unknown, values: readonly T[]): T | 
   return typeof v === 'string' && (values as readonly string[]).includes(v) ? (v as T) : null
 }
 
-/** A same-origin pathname: leading slash, no query / fragment / whitespace, ≤ max. */
+/**
+ * A same-origin pathname: exactly one leading slash (never a protocol-relative
+ * `//host` that a reader could turn into an off-site link), no query /
+ * fragment / whitespace, no `.` or `..` segment, ≤ max.
+ */
 export function asPath(v: unknown, max = 200): string | null {
   if (typeof v !== 'string' || v.length === 0 || v.length > max || !PATH_RE.test(v)) return null
+  if (DOT_SEGMENT_RE.test(v)) return null
   return v
 }
 
@@ -362,10 +383,10 @@ function envRowOf(p: Record<string, unknown>): EnvRow {
     ua_brands: has(uad) ? clampStr(uad.brands, 200) : null,
     ua_mobile: has(uad) ? asBool(uad.mobile) : null,
     ua_platform: has(uad) ? clampStr(uad.platform, 40) : null,
-    ua_arch: has(hi) ? clampStr(hi.architecture, 20) : null,
+    ua_arch: has(hi) ? clampStr(hi.architecture, 40) : null,
     ua_bitness: has(hi) ? clampStr(hi.bitness, 8) : null,
-    ua_model: has(hi) ? clampStr(hi.model, 60) : null,
-    ua_platform_ver: has(hi) ? clampStr(hi.platformVersion, 20) : null,
+    ua_model: has(hi) ? clampStr(hi.model, 80) : null,
+    ua_platform_ver: has(hi) ? clampStr(hi.platformVersion, 40) : null,
     ua_full_versions: has(hi) ? clampStr(hi.fullVersionList, 300) : null,
     ua_form_factors: has(hi) ? clampStr(hi.formFactors, 60) : null,
     ua_wow64: has(hi) ? asBool(hi.wow64) : null,
@@ -407,7 +428,7 @@ function envRowOf(p: Record<string, unknown>): EnvRow {
     net_save_data: has(net) ? asBool(net.saveData) : null,
     voices: asInt(p.voices, 0, 1000),
     tz_name: clampStr(tz.name, 64),
-    tz_offset_min: asInt(tz.offsetMin, -900, 900),
+    tz_offset_min: asIntIn(tz.offsetMin, -900, 900),
     intl_locale: clampStr(p.locale, 24),
     display_mode: asEnum(p.display, ['standalone', 'browser', 'minimal-ui', 'fullscreen'] as const),
     outer_w: asInt(outer.w, 0, 20_000),
@@ -434,6 +455,8 @@ interface Ctx {
   /** Latest event `t` seen so far (any type) and latest pageview `t`. */
   lastT: number
   lastPvT: number | null
+  /** entry_path / nav_kind already came from an INITIAL_KINDS pageview (R2-M3). */
+  entryFromInitial: boolean
 }
 
 /**
@@ -457,12 +480,6 @@ function sanitizeEvent(raw: Record<string, unknown>, ctx: Ctx, out: ParsedEnvelo
     const n = (ctx.perType.get(ev) ?? 0) + 1
     ctx.perType.set(ev, n)
     if (n > cap) return null
-  }
-
-  // last_path: the latest-t event of ANY type (merged ones included).
-  if (out.lastPath === null || ts >= ctx.lastT) {
-    ctx.lastT = ts
-    out.lastPath = path
   }
 
   let name: string | null = null
@@ -493,11 +510,12 @@ function sanitizeEvent(raw: Record<string, unknown>, ctx: Ctx, out: ParsedEnvelo
         viewportW: asInt(viewport.w, 0, 20_000),
         viewportH: asInt(viewport.h, 0, 20_000),
         tz: clampStr(p.tz, 64),
-        tzOffsetMin: asInt(p.tzOffsetMin, -900, 900),
+        tzOffsetMin: asIntIn(p.tzOffsetMin, -900, 900),
         lang: clampStr(p.lang, 24),
       }
-      const nav = INITIAL_KINDS.has(kind) ? docFactsOf(p.nav) : null
-      const softNavMs = asInt(p.softNavMs, 0, 120_000)
+      const isInitial = INITIAL_KINDS.has(kind)
+      const nav = isInitial ? docFactsOf(p.nav) : null
+      const softNavMs = asIntIn(p.softNavMs, 0, 120_000)
       const textLen = asInt(p.textLen, 0, 10_000_000)
       payload = compact({
         pvid,
@@ -524,8 +542,20 @@ function sanitizeEvent(raw: Record<string, unknown>, ctx: Ctx, out: ParsedEnvelo
         connection: clampStr(p.connection, 24),
       })
       out.pageviews++
-      if (!out.pv) {
-        out.pv = info
+      if (!out.pv) out.pv = info
+      // entry_path / nav_kind (and visitors.first_entry_path) describe the
+      // DOCUMENT the visit started on, so only an initial-load pageview may set
+      // them. An SPA pageview is accepted as a fallback only when the envelope
+      // cannot carry one — a v1 envelope, or a pageview with no `from` (audit
+      // R2-M3): an out-of-order beacon can no longer freeze an SPA path as the
+      // landing page.
+      if (isInitial) {
+        if (!ctx.entryFromInitial) {
+          ctx.entryFromInitial = true
+          out.entryPath = pvPath
+          out.navKind = kind
+        }
+      } else if (out.entryPath === null && (ctx.v === 1 || p.from === null || p.from === undefined)) {
         out.entryPath = pvPath
         out.navKind = kind
       }
@@ -541,10 +571,15 @@ function sanitizeEvent(raw: Record<string, unknown>, ctx: Ctx, out: ParsedEnvelo
       m.navKind = first(m.navKind, kind)
       m.softNavMs = first(m.softNavMs, softNavMs)
       m.textLen = first(m.textLen, textLen)
-      if (softNavMs !== null) {
-        const pp = perfOf(out, pvid, pvPath, ts)
-        pp.softNavMs = first(pp.softNavMs, softNavMs)
-      }
+      // Seed page_perf from the pageview itself so `path` / `ts` describe the
+      // document that loaded, not the page that happened to be current when a
+      // vitals / perf metric fired (audit R2-M1). First write wins in the map
+      // and in the SQL upsert, so a later vitals event for another path merges
+      // into THIS row without moving it.
+      const pp = perfOf(out, pvid, pvPath, ts)
+      pp.path = pvPath
+      pp.ts = Math.min(pp.ts, ts)
+      if (softNavMs !== null) pp.softNavMs = first(pp.softNavMs, softNavMs)
       break
     }
     case 'page_leave': {
@@ -552,11 +587,12 @@ function sanitizeEvent(raw: Record<string, unknown>, ctx: Ctx, out: ParsedEnvelo
       const pvid = p.pvid
       const pvPath = asPath(p.path, 200) ?? path
       const enteredAtRaw = asNum(p.enteredAt)
-      const enteredAt = enteredAtRaw === null ? ts : clampTs(enteredAtRaw, ctx.now)
+      // entered_at can never be later than the leave it is reported with (R2-L1).
+      const enteredAt = enteredAtRaw === null ? ts : Math.min(clampTs(enteredAtRaw, ctx.now), ts)
       const activeMs = asInt(p.activeMs, 0, DURATION_MAX_MS) ?? 0
       const hiddenMs = asInt(p.hiddenMs, 0, DURATION_MAX_MS) ?? 0
       const blurs = asInt(p.blurs, 0, 10_000) ?? 0
-      const maxScrollPct = asInt(p.maxScrollPct, 0, 100) ?? 0
+      const maxScrollPct = asIntIn(p.maxScrollPct, 0, 100) ?? 0
       const scrollPx = asInt(p.scrollPx, 0, 10_000_000) ?? 0
       const scrollReversals = asInt(p.scrollReversals, 0, 10_000) ?? 0
       const maxScrollVel = asInt(p.maxScrollVel, 0, 1_000_000)
@@ -600,7 +636,7 @@ function sanitizeEvent(raw: Record<string, unknown>, ctx: Ctx, out: ParsedEnvelo
       if (isId(p.pvid)) {
         const m = visitOf(out, p.pvid, path, ts)
         m.activeMs = max(m.activeMs, asInt(p.activeMs, 0, DURATION_MAX_MS))
-        m.maxScrollPct = max(m.maxScrollPct, asInt(p.maxScrollPct, 0, 100))
+        m.maxScrollPct = max(m.maxScrollPct, asIntIn(p.maxScrollPct, 0, 100))
         if (m.maxScrollPct > out.maxScroll) out.maxScroll = m.maxScrollPct
       }
       break
@@ -611,7 +647,7 @@ function sanitizeEvent(raw: Record<string, unknown>, ctx: Ctx, out: ParsedEnvelo
       const ms = asInt(p.ms, 0, DURATION_MAX_MS)
       const pvid = isId(p.pvid) ? p.pvid : null
       const activeMs = asInt(p.activeMs, 0, DURATION_MAX_MS)
-      const maxScrollPct = asInt(p.maxScrollPct, 0, 100)
+      const maxScrollPct = asIntIn(p.maxScrollPct, 0, 100)
       payload = compact({ state, ms, pvid, activeMs, maxScrollPct })
       if (pvid && state === 'hidden') {
         const m = visitOf(out, pvid, path, ts)
@@ -750,7 +786,7 @@ function sanitizeEvent(raw: Record<string, unknown>, ctx: Ctx, out: ParsedEnvelo
     }
     case 'site_search': {
       const q = clampStr(p.q, 40)
-      payload = compact({ q: q ? q.toLowerCase() : null, results: asInt(p.results, 0, 100), chosen: clampStr(p.chosen, 20) })
+      payload = compact({ q: q ? q.toLowerCase() : null, results: asInt(p.results, 0, 100), chosen: clampStr(p.chosen, 40) })
       out.counters.searches++
       break
     }
@@ -932,6 +968,14 @@ function sanitizeEvent(raw: Record<string, unknown>, ctx: Ctx, out: ParsedEnvelo
     }
   }
 
+  // last_path: the latest-t event of ANY ACCEPTED type (merged ones included).
+  // Updated only here, past every `return null` above, so a dropped event can
+  // no longer rewrite sessions.last_path (audit R2-L2).
+  if (out.lastPath === null || ts >= ctx.lastT) {
+    ctx.lastT = ts
+    out.lastPath = path
+  }
+
   if (!store) return null
 
   let json: string | null = null
@@ -988,7 +1032,7 @@ export function parseEnvelope(body: unknown, now: number): ParsedEnvelope | null
     pageVisits: new Map(),
     pagePerf: new Map(),
   }
-  const ctx: Ctx = { now, v, fallbackPath, perType: new Map(), lastT: -Infinity, lastPvT: null }
+  const ctx: Ctx = { now, v, fallbackPath, perType: new Map(), lastT: -Infinity, lastPvT: null, entryFromInitial: false }
   for (const raw of (env.events as unknown[]).slice(0, MAX_EVENTS)) {
     if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) continue
     const clean = sanitizeEvent(raw as Record<string, unknown>, ctx, parsed)

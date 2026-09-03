@@ -114,7 +114,7 @@ const cohortsEmpty = computed(() => Boolean(cohorts.value) && (cohorts.value?.vi
 
 <template>
   <div class="vs">
-    <FilterBar />
+    <FilterBar :show-compare="false" />
 
     <p v-if="cError" class="vs__fault">{{ opsFault(cError, 'cohorts') }}</p>
     <p v-else-if="!cohorts && cStatus === 'pending'" class="vs__poll label">... POLLING</p>
@@ -122,7 +122,7 @@ const cohortsEmpty = computed(() => Boolean(cohorts.value) && (cohorts.value?.vi
     <template v-if="cohorts">
       <div class="vs__stats">
         <StatCard label="VISITORS IN RANGE" :value="fmt.num(cohorts.visitors)" hint="visitors with ≥ 1 session in the window" />
-        <StatCard label="RETURNING SHARE" :value="fmt.pct(cohorts.returningShare, 1)" hint="visitors with visit_count > 1" :to="linkTo('/ops/visitors', { returning: '1' })" />
+        <StatCard label="RETURNING SHARE" :value="fmt.pct(cohorts.returningShare, 1)" hint="visitors with visit_count > 1 — the same definition the RETURNING chip uses on this view" :to="linkTo('/ops/visitors', { returning: '1' })" />
         <StatCard label="SEEN < 1 D" :value="fmt.num(cohorts.recency[0]?.n ?? 0)" />
         <StatCard label="10+ VISITS" :value="fmt.num(cohorts.frequency[3]?.n ?? 0)" />
       </div>
@@ -167,7 +167,7 @@ const cohortsEmpty = computed(() => Boolean(cohorts.value) && (cohorts.value?.vi
         row-testid="visitor-row"
         :sort="sort"
         server-sort
-        :row-to="(r: Row) => `/ops/visitors/${String(r.vid)}`"
+        :row-to="(r: Row) => linkTo(`/ops/visitors/${String(r.vid)}`)"
         :empty="loading ? '... POLLING' : 'NO DATA // VISITORS'"
         dense
         @sort="onSort"

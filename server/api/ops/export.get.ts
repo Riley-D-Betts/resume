@@ -26,7 +26,12 @@ interface Page {
   cursor: (last: Row) => string
 }
 
-/** Keyset page per entity: sessions (started_at, sid), visitors (last_seen_at, vid), page_visits (entered_at, pvid), page_perf (ts, pvid), events (id). */
+/**
+ * Keyset page per entity: sessions (started_at, sid), visitors
+ * (last_seen_at, vid), page_visits (entered_at, pvid), page_perf (ts, pvid),
+ * events (ts, id) — the events page walks the TIME axis, not the rowid, so
+ * the range predicate is the leading one (R4-M6; wants idx_events_ts(ts, id)).
+ */
 function pageFor(entity: ExportEntity, where: WhereParts, after: string | undefined, limit: number, tsStart: number, tsEnd: number): Page {
   const c = splitCursor(after)
   const lim = limit + 1
@@ -65,10 +70,11 @@ function pageFor(entity: ExportEntity, where: WhereParts, after: string | undefi
     }
     case 'events':
     default: {
+      const ks = c ? ' AND (e.ts > ? OR (e.ts = ? AND e.id > ?))' : ''
       return {
-        sql: `SELECT e.id, e.sid, e.ts, e.type, e.name, e.path, e.payload FROM events e WHERE e.id > ? AND e.ts >= ? AND e.ts < ? AND EXISTS (SELECT 1 FROM sessions s WHERE s.sid = e.sid AND ${where.sql}) ORDER BY e.id LIMIT ?`,
-        args: [c ? c.n : 0, tsStart, tsEnd, ...where.args, lim],
-        cursor: (r) => String(toNum(r.id)),
+        sql: `SELECT e.id, e.sid, e.ts, e.type, e.name, e.path, e.payload FROM events e WHERE e.ts >= ? AND e.ts < ?${ks} AND EXISTS (SELECT 1 FROM sessions s WHERE s.sid = e.sid AND ${where.sql}) ORDER BY e.ts, e.id LIMIT ?`,
+        args: [tsStart, tsEnd, ...(c ? [c.n, c.n, c.id] : []), ...where.args, lim],
+        cursor: (r) => `${toNum(r.ts)}:${toNum(r.id)}`,
       }
     }
   }

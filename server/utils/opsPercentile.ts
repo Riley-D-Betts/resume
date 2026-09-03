@@ -58,7 +58,7 @@ export function foldPercentiles(rows: readonly PercentileRow[]): Map<string, Per
     const id = percentileKey(String(r.key), String(r.metric))
     let p = out.get(id)
     if (!p) {
-      p = { p50: 0, p75: 0, p95: 0, n: Number(r.n) }
+      p = { p50: null, p75: null, p95: null, n: Number(r.n) }
       out.set(id, p)
     }
     const t = percentileTargets(Number(r.n))

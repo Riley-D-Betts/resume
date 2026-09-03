@@ -1,5 +1,6 @@
 import { ID_RE, replayKey, replayKeyPair } from '../utils/replayKeys'
 import { REPLAY_TOKEN_COOKIE, replayTokenMatches } from '../utils/replayAuth'
+import { rateLimitKey } from '../utils/ratelimit'
 
 /**
  * POST /api/replay — one rrweb chunk (plan deltas A0 / A7 / A14 / A21).
@@ -10,11 +11,16 @@ import { REPLAY_TOKEN_COOKIE, replayTokenMatches } from '../utils/replayAuth'
  *
  * Auth: the `rb_rt` cookie /api/collect issued must match x-rb-sid (401), and
  * the sid must already have a non-bot `sessions` row (403) — a stranger can
- * no longer write chunks into anyone's session.
+ * no longer write chunks into anyone's session. In production with no
+ * NUXT_SESSION_PASSWORD / NUXT_ADMIN_PASSWORD no token can be derived at all,
+ * so every upload is refused with 401 (audit S2).
  *
  * Write order (A21): accounting row with pending = 1 → bucket.put → delete the
  * stale compression twin → pending = 0 (+ has_replay once seq 0 exists, A14).
  * A crash between the row and the flip leaves a pending row the prune sweeps.
+ * A re-upload of a chunk that is already confirmed (pending = 0) is answered
+ * 204 without touching the row or the object, so a client retry after a lost
+ * response can never delete a good chunk (audit R2-L6).
  */
 
 const SEQ_RE = /^\d{1,4}$/ // 0..9999
@@ -24,7 +30,7 @@ const PS_PAST_MS = 7 * 24 * 60 * 60 * 1000
 const PS_FUTURE_MS = 60_000
 
 export default defineEventHandler(async (event) => {
-  const ip = getClientIp(event)
+  const ip = rateLimitKey(getClientIp(event))
   if (!rateLimit('replay', ip, 30, 60_000)) {
     throw createError({ statusCode: 429, statusMessage: 'Too Many Requests' })
   }
@@ -44,7 +50,10 @@ export default defineEventHandler(async (event) => {
   const seq = Number(seqRaw)
   const gz = getHeader(event, 'x-rb-gz') !== '0' // chunks are usually gzipped
   const now = Date.now()
-  const psRaw = Number(getHeader(event, 'x-rb-ps') ?? Number.NaN)
+  // An absent OR empty header means "no page start" — Number('') is 0, which
+  // used to clamp the segment to now − 7 d and shuffle the player (audit R2-L5).
+  const psHeader = getHeader(event, 'x-rb-ps')?.trim()
+  const psRaw = psHeader ? Number(psHeader) : Number.NaN
   const pageStartedAt = Number.isFinite(psRaw) ? Math.min(Math.max(psRaw, now - PS_PAST_MS), now + PS_FUTURE_MS) : now
 
   if (!replayTokenMatches(event, sid, getCookie(event, REPLAY_TOKEN_COOKIE))) {
@@ -67,23 +76,24 @@ export default defineEventHandler(async (event) => {
   // rule), and the pending accounting row gated by the 15 MB per-sid cap —
   // evaluated inside the transaction so concurrent uploads cannot race past it.
   let session: { is_bot: number } | null
-  let previous: { compressed: number } | null
+  let previous: { compressed: number; pending: number } | null
   let inserted: number
   try {
     const [s, prev, ins] = await db.batch([
       db.prepare('SELECT is_bot FROM sessions WHERE sid = ?').bind(sid),
-      db.prepare('SELECT compressed FROM replay_chunks_v2 WHERE sid = ? AND rid = ? AND seq = ?').bind(sid, rid, seq),
+      db.prepare('SELECT compressed, pending FROM replay_chunks_v2 WHERE sid = ? AND rid = ? AND seq = ?').bind(sid, rid, seq),
       db
         .prepare(
           `INSERT OR REPLACE INTO replay_chunks_v2 (sid, rid, seq, bytes, compressed, pending, created_at, page_started_at)
            SELECT ?, ?, ?, ?, ?, 1, ?, ?
            WHERE EXISTS (SELECT 1 FROM sessions WHERE sid = ? AND is_bot = 0)
+             AND NOT EXISTS (SELECT 1 FROM replay_chunks_v2 WHERE sid = ? AND rid = ? AND seq = ? AND pending = 0)
              AND (SELECT COALESCE(SUM(bytes), 0) FROM replay_chunks_v2 WHERE sid = ? AND NOT (rid = ? AND seq = ?)) + ? <= ?`,
         )
-        .bind(sid, rid, seq, body.length, gz ? 1 : 0, now, pageStartedAt, sid, sid, rid, seq, body.length, MAX_SESSION_BYTES),
+        .bind(sid, rid, seq, body.length, gz ? 1 : 0, now, pageStartedAt, sid, sid, rid, seq, sid, rid, seq, body.length, MAX_SESSION_BYTES),
     ])
     session = (s?.results?.[0] as { is_bot: number } | undefined) ?? null
-    previous = (prev?.results?.[0] as { compressed: number } | undefined) ?? null
+    previous = (prev?.results?.[0] as { compressed: number; pending: number } | undefined) ?? null
     inserted = ins?.meta?.changes ?? 0
   } catch (err) {
     console.error('[replay] ledger failed:', err)
@@ -92,6 +102,14 @@ export default defineEventHandler(async (event) => {
 
   if (!session || session.is_bot !== 0) {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden' })
+  }
+  // Already confirmed: the ledger row and the object are exactly what a
+  // successful upload left behind. The INSERT above skipped itself, so simply
+  // acknowledge — a retry of a chunk whose 204 was lost must not re-open the
+  // row (a failing put would then delete a good object — audit R2-L6).
+  if (previous && previous.pending === 0) {
+    setResponseStatus(event, 204)
+    return null
   }
   if (inserted === 0) {
     throw createError({ statusCode: 413, statusMessage: 'Payload Too Large' })

@@ -185,7 +185,7 @@ const isEmpty = computed(() => Boolean(data.value) && (data.value?.totals.sessio
             row-key="vid"
             row-testid="visitor-row"
             :sort="{ key: 'lastSeen', dir: 'desc' }"
-            :row-to="(r: Row) => `/ops/visitors/${String(r.vid)}`"
+            :row-to="(r: Row) => linkTo(`/ops/visitors/${String(r.vid)}`)"
             empty="NO DATA // VISITORS"
             dense
             :limit="20"
@@ -199,7 +199,7 @@ const isEmpty = computed(() => Boolean(data.value) && (data.value?.totals.sessio
             row-key="sid"
             row-testid="session-row"
             :sort="{ key: 'started_at', dir: 'desc' }"
-            :row-to="(r: Row) => `/ops/sessions/${String(r.sid)}`"
+            :row-to="(r: Row) => linkTo(`/ops/sessions/${String(r.sid)}`)"
             empty="NO DATA // SESSIONS"
             dense
             :limit="25"

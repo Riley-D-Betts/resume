@@ -68,8 +68,13 @@ const funnelAside = computed<FunnelStepRow[]>(() => {
 // -- bar blocks ----------------------------------------------------------
 const subjectRows = computed<BarRow[]>(() => data.value?.subjects ?? [])
 const searchRows = computed<BarRow[]>(() => data.value?.searches ?? [])
-const findRows = computed<BarRow[]>(() => (data.value?.finds ?? []).map(f => ({ k: f.k, n: f.n, to: linkTo('/ops/pages/detail', { path: f.k }) })))
-const exitRows = computed<BarRow[]>(() => (data.value?.exitByPage ?? []).map(f => ({ k: f.k, n: f.n, to: linkTo('/ops/pages/detail', { path: f.k }) })))
+/** `(unknown)` / `??` rows are placeholders: plain text, never a path filter (R4-M9). */
+function pageRows(list: { k: string; n: number }[] | undefined): BarRow[] {
+  return (list ?? []).map(f => ({ k: f.k, n: f.n, to: f.k.startsWith('/') ? linkTo('/ops/pages/detail', { path: f.k }) : undefined }))
+}
+
+const findRows = computed<BarRow[]>(() => pageRows(data.value?.finds))
+const exitRows = computed<BarRow[]>(() => pageRows(data.value?.exitByPage))
 const hoverRows = computed<BarRow[]>(() =>
   (data.value?.hoverKeys ?? []).map(h => ({ k: h.key, n: h.n, display: `${fmt.num(h.n)} · avg ${fmt.ms(h.avgMs)}` })),
 )
@@ -188,7 +193,7 @@ const isEmpty = computed(() => {
             :rows="copyRows"
             row-key="id"
             :sort="{ key: 'ts', dir: 'desc' }"
-            :row-to="(r: Row) => `/ops/sessions/${String(r.sid)}`"
+            :row-to="(r: Row) => linkTo(`/ops/sessions/${String(r.sid)}`)"
             empty="NO DATA // COPIES"
             dense
             :limit="30"
@@ -226,7 +231,7 @@ const isEmpty = computed(() => {
             :rows="printRows"
             row-key="id"
             :sort="{ key: 'ts', dir: 'desc' }"
-            :row-to="(r: Row) => `/ops/sessions/${String(r.sid)}`"
+            :row-to="(r: Row) => linkTo(`/ops/sessions/${String(r.sid)}`)"
             empty="NO DATA // PRINTS"
             dense
             :limit="15"
@@ -240,7 +245,7 @@ const isEmpty = computed(() => {
             row-key="sid"
             row-testid="session-row"
             :sort="{ key: 'started_at', dir: 'desc' }"
-            :row-to="(r: Row) => `/ops/sessions/${String(r.sid)}`"
+            :row-to="(r: Row) => linkTo(`/ops/sessions/${String(r.sid)}`)"
             empty="NO DATA // SESSIONS"
             dense
             :limit="25"

@@ -84,11 +84,17 @@ const lcpSeries = computed<LineSeries[]>(() => [
 function histBins(metric: PerfMetric): ColumnBin[] {
   const h = (data.value?.hist ?? []).find(x => x.metric === metric)
   if (!h) return []
-  return h.bins.map(b => ({
-    label: metric === 'cls' ? b.from.toFixed(2) : `${fmt.num(b.from)}`,
-    n: b.n,
-    title: `${metric === 'cls' ? `${b.from.toFixed(2)}–${b.to.toFixed(2)}` : `${fmt.num(b.from)}–${fmt.num(b.to)} ms`}: ${fmt.num(b.n)} loads`,
-  }))
+  // The last bin is open ended — label it `≥ x`, never as a closed range (R4-L6).
+  return h.bins.map(b => {
+    const from = metric === 'cls' ? b.from.toFixed(2) : fmt.num(b.from)
+    const to = metric === 'cls' ? b.to.toFixed(2) : fmt.num(b.to)
+    const unit = metric === 'cls' ? '' : ' ms'
+    return {
+      label: b.overflow ? `≥ ${from}` : from,
+      n: b.n,
+      title: `${b.overflow ? `≥ ${from}${unit}` : `${from}–${to}${unit}`}: ${fmt.num(b.n)} loads`,
+    }
+  })
 }
 
 const lcpBins = computed(() => histBins('lcp'))
@@ -123,7 +129,7 @@ const isEmpty = computed(() => Boolean(data.value) && (data.value?.sampled.total
 
 <template>
   <div class="pf">
-    <FilterBar />
+    <FilterBar :show-compare="false" />
 
     <p v-if="error" class="pf__fault">{{ opsFault(error, 'performance') }}</p>
     <p v-else-if="!data && status === 'pending'" class="pf__poll label">... POLLING</p>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 const route = useRoute()
 const router = useRouter()
+const { linkTo } = useOpsFilters()
 
 interface NavLink {
   to: string
@@ -39,6 +40,11 @@ const links = computed(() =>
   }),
 )
 
+/** Console links carry the shared filters (R4-M5); VIEW SITE stays clean. */
+function href(l: NavLink): string {
+  return l.to.startsWith('/ops') ? linkTo(l.to) : l.to
+}
+
 async function logout() {
   try {
     await $fetch('/api/ops/logout', { method: 'POST' })
@@ -60,7 +66,7 @@ async function logout() {
         <NuxtLink
           v-for="l in links"
           :key="l.to"
-          :to="l.to"
+          :to="href(l)"
           class="ops-strip__link"
           :class="{ 'ops-strip__link--on': l.active(route.path) }"
           :aria-current="l.active(route.path) ? 'page' : undefined"

@@ -18,11 +18,13 @@ function typesClause(types: string | undefined): { sql: string; args: string[] }
 }
 
 /**
- * GET /api/ops/sessions/:id?after=<event id>&limit=<≤2000, default 500>&types=a,b —
+ * GET /api/ops/sessions/:id?after=<event id>&limit=<≤500, default 500>&types=a,b —
  * the full session row + session_net + session_env, the visitor summary,
  * page visits, page_perf rows, the first events page (keyset `id > ?`,
  * ORDER BY id — the UI sorts by (ts, id)), `nextAfter`, and derived facts:
  * TZ mismatch, bot reason (+ the UA when honeypot), intent flags, Σ active.
+ * `limit` is capped at 500 — LOAD MORE walks the rest through
+ * `/api/ops/sessions/:id/events`.
  * Uncached.
  */
 export default defineEventHandler(async (event): Promise<SessionDetail> => {
@@ -31,7 +33,9 @@ export default defineEventHandler(async (event): Promise<SessionDetail> => {
   if (!ID_RE.test(sid)) throw createError({ statusCode: 400, statusMessage: 'bad session id' })
   const raw = getQuery(event) as Record<string, unknown>
   const after = intParam(raw.after, 0, 0, Number.MAX_SAFE_INTEGER)
-  const limit = intParam(raw.limit, 500, 1, 2000)
+  // 500 events is the whole first page; the rest arrive through
+  // /sessions/:id/events with the keyset cursor (R4-M10).
+  const limit = intParam(raw.limit, 500, 1, 500)
   const types = typesClause(typeof raw.types === 'string' ? raw.types : undefined)
   const db = getDb(event)
 
@@ -75,9 +79,12 @@ export default defineEventHandler(async (event): Promise<SessionDetail> => {
 
   const ua = toStr(sessionRow.ua)
   let botReason: BotReason = null
+  // HONEYPOT only when a honeypot row actually matched; a bare is_bot flag
+  // (set at ingest for some other signal) is FLAGGED (R4-L13).
   if (isBotUA(ua)) botReason = 'ua'
   else if (net?.verified_bot === 1) botReason = 'verified'
-  else if (honeypotHit || toNum(sessionRow.is_bot) === 1) botReason = 'honeypot'
+  else if (honeypotHit) botReason = 'honeypot'
+  else if (toNum(sessionRow.is_bot) === 1) botReason = 'flagged'
 
   const tzMismatch =
     net !== null

@@ -3,6 +3,7 @@ import type { SqlError, SqlResult } from '../../../shared/analytics/ops'
 import { requireAdmin } from '../../utils/auth'
 import { getDb } from '../../utils/db'
 import { getClientIp } from '../../utils/ip'
+import { throttleKey } from '../../utils/loginThrottle'
 import { toNum } from '../../utils/opsDb'
 import { rateLimit } from '../../utils/ratelimit'
 import { MAX_SQL_CHARS, clampLimit, guardReadOnly } from '../../utils/sqlGuard'
@@ -63,7 +64,9 @@ function timeout<T>(p: Promise<T>, ms: number): Promise<T> {
 export default defineEventHandler(async (event): Promise<SqlResult | SqlError> => {
   await requireAdmin(event)
   const ip = getClientIp(event)
-  if (!rateLimit('ops-sql', ip, 30, 60_000)) return fail(event, 429, 'rate limited: 30 statements per minute')
+  // One budget per client, IPv6 normalised to its /64 (the same key the login
+  // limiter and the durable lockout use).
+  if (!rateLimit('ops-sql', throttleKey(ip), 30, 60_000)) return fail(event, 429, 'rate limited: 30 statements per minute')
   if (getHeader(event, 'x-rb-ops') !== '1') return fail(event, 400, 'missing x-rb-ops header')
 
   const body = await readBody<{ sql?: unknown; limit?: unknown }>(event).catch(() => null)

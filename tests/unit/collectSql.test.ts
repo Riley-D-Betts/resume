@@ -263,10 +263,11 @@ const HDR = {
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
 
 /** Run the collect batch the way collect.post.ts does, with checkArgs on every statement. */
-function persist(db: DatabaseSync, parsed: NonNullable<ReturnType<typeof parseEnvelope>>, opts: { isNew: boolean; bot?: boolean; heartbeats?: number; now: number }) {
+function persist(db: DatabaseSync, parsed: NonNullable<ReturnType<typeof parseEnvelope>>, opts: { isNew: boolean; bot?: boolean; heartbeats?: number; now: number; ua?: string }) {
   const bot = opts.bot ?? false
+  const ua = opts.ua ?? UA
   const facts: CollectFacts = {
-    now: opts.now, storeIp: '203.0.113.9', ua: UA, dev: parseUA(UA, { maxTouchPoints: parsed.maxTouchPoints }), cf: CF, hdr: HDR, bot,
+    now: opts.now, storeIp: '203.0.113.9', ua, dev: parseUA(ua, { maxTouchPoints: parsed.maxTouchPoints }), cf: CF, hdr: HDR, bot,
     heartbeats: opts.heartbeats ?? parsed.heartbeats, rows: bot ? [] : parsed.events, cfTzOffsetMin: offsetMin(CF.cfTz, opts.now), rdnsHost: null,
   }
   const binds = buildCollectBinds(parsed, facts)
@@ -275,7 +276,10 @@ function persist(db: DatabaseSync, parsed: NonNullable<ReturnType<typeof parseEn
     assert.deepEqual(problems, [], `${label}: ${problems.join('; ')}`)
     db.prepare(sql).run(...(clean as never[]))
   }
-  if (opts.isNew) exec('visitors', VISITORS_SQL, binds.visitors)
+  // ① runs on every envelope (audit R2-L9): visit_count still only moves when
+  // the sessions row does not exist yet, which the EXISTS decides in-batch.
+  void opts.isNew
+  exec('visitors', VISITORS_SQL, binds.visitors)
   exec('sessions', SESSION_SQL, binds.session)
   exec('session_net', SESSION_NET_SQL, binds.net)
   if (!bot) {
@@ -548,4 +552,139 @@ test('parseUA: audit A30 additions', () => {
     const r = parseUA(ua, { maxTouchPoints: tp })
     assert.deepEqual([r.browser, r.os, r.deviceType], [browser, os, device], ua)
   }
+})
+
+// ---------------------------------------------------------------------------
+// R2 review fixes that live in the SQL / the ingest mapping.
+// ---------------------------------------------------------------------------
+
+const UA_IPAD_LIKE_MAC = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15'
+const SID_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+const VID_A = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+const PVID_1 = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+const PVID_2 = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
+const body = (events: unknown[], sid = SID_A, vid = VID_A) => ({ v: 2, vid, sid, returning: false, url: '/', events })
+
+test('sessions upsert: an iPadOS hint in a LATER envelope still wins (R2-M2)', () => {
+  const db = migrated()
+  const now = 1_800_000_000_000
+
+  // Envelope 1: the pageview only. An iPad is indistinguishable from a Mac here.
+  const first = parseEnvelope(body([{ t: now - 1000, type: 'pageview', name: null, u: '/', p: { pvid: PVID_1, path: '/', from: null, kind: 'initial' } }]), now)!
+  persist(db, first, { isNew: true, now, ua: UA_IPAD_LIKE_MAC })
+  const before = get(db, 'SELECT os, device_type, browser FROM sessions WHERE sid = ?', SID_A)
+  assert.deepEqual([before.os, before.device_type, before.browser], ['macOS', 'desktop', 'Safari'])
+
+  // Envelope 2: the env probe lands with maxTouchPoints — first-write would
+  // have kept macOS / desktop forever.
+  const second = parseEnvelope(body([{ t: now + 3000, type: 'env', name: null, u: '/', p: { webdriver: false, maxTouchPoints: 5 } }]), now + 5000)!
+  assert.equal(second.maxTouchPoints, 5)
+  persist(db, second, { isNew: false, now: now + 5000, ua: UA_IPAD_LIKE_MAC })
+  const after = get(db, 'SELECT os, device_type, browser FROM sessions WHERE sid = ?', SID_A)
+  assert.deepEqual([after.os, after.device_type], ['iPadOS', 'tablet'], 'the hint upgrades os / device_type')
+  assert.equal(after.browser, 'Safari', 'other first-write columns are untouched')
+
+  // A later envelope WITHOUT the hint must not downgrade it back.
+  const third = parseEnvelope(body([{ t: now + 9000, type: 'find', name: null, u: '/', p: {} }]), now + 9000)!
+  persist(db, third, { isNew: false, now: now + 9000, ua: UA_IPAD_LIKE_MAC })
+  const last = get(db, 'SELECT os, device_type FROM sessions WHERE sid = ?', SID_A)
+  assert.deepEqual([last.os, last.device_type], ['iPadOS', 'tablet'], 'no downgrade once resolved')
+  db.close()
+})
+
+test('sessions upsert: the iPadOS CASE does not disturb an ordinary desktop session', () => {
+  const db = migrated()
+  const now = 1_800_000_000_000
+  const first = parseEnvelope(body([{ t: now - 1000, type: 'pageview', name: null, u: '/', p: { pvid: PVID_1, path: '/', from: null, kind: 'initial' } }]), now)!
+  persist(db, first, { isNew: true, now })
+  const second = parseEnvelope(body([{ t: now + 10, type: 'find', name: null, u: '/', p: {} }]), now + 100)!
+  persist(db, second, { isNew: false, now: now + 100 })
+  const s = get(db, 'SELECT os, device_type FROM sessions WHERE sid = ?', SID_A)
+  assert.deepEqual([s.os, s.device_type], ['Windows', 'desktop'])
+  db.close()
+})
+
+test('page_perf keeps the document path / ts across envelopes (R2-M1)', () => {
+  const db = migrated()
+  const now = 1_800_000_000_000
+  const t0 = now - 5000
+
+  // Envelope 1: the landing pageview alone — it already seeds the perf row.
+  const first = parseEnvelope(body([{ t: t0, type: 'pageview', name: null, u: '/', p: { pvid: PVID_1, path: '/', from: null, kind: 'initial' } }]), now)!
+  persist(db, first, { isNew: true, now })
+  const seeded = get(db, 'SELECT path, ts, lcp_ms FROM page_perf WHERE pvid = ?', PVID_1)
+  assert.deepEqual([seeded.path, seeded.ts, seeded.lcp_ms], ['/', t0, null])
+
+  // Envelope 2: the visitor is on /employee when the vitals for the FIRST
+  // document finally fire (LCP within 3 s of load, after a fast SPA nav).
+  const second = parseEnvelope(body([
+    { t: t0 + 2000, type: 'pageview', name: null, u: '/employee', p: { pvid: PVID_2, path: '/employee', from: '/', kind: 'spa', softNavMs: 80 } },
+    { t: t0 + 2500, type: 'vitals', name: null, u: '/employee', p: { pvid: PVID_1, ttfb: 100, fcp: 300, lcp: 600, cls: 0.02 } },
+    { t: t0 + 2600, type: 'perf', name: null, u: '/employee', p: { pvid: PVID_1, nav: { load: 800, type: 'navigate' }, resources: { count: 3 }, longTasks: { count: 0 } } },
+  ]), now + 3000)!
+  persist(db, second, { isNew: false, now: now + 3000 })
+
+  const doc = get(db, 'SELECT path, ts, lcp_ms, load_ms FROM page_perf WHERE pvid = ?', PVID_1)
+  assert.deepEqual([doc.path, doc.ts], ['/', t0], 'the LCP stays attributed to the page that loaded')
+  assert.deepEqual([doc.lcp_ms, doc.load_ms], [600, 800], 'and the metrics still merged in')
+  const spa = get(db, 'SELECT path, ts, lcp_ms, soft_nav_ms FROM page_perf WHERE pvid = ?', PVID_2)
+  assert.deepEqual([spa.path, spa.ts, spa.lcp_ms, spa.soft_nav_ms], ['/employee', t0 + 2000, null, 80])
+  assert.equal(get(db, 'SELECT COUNT(*) AS n FROM page_perf WHERE sid = ?', SID_A).n, 2)
+  db.close()
+})
+
+test('visitors.last_seen_at advances on every envelope, visit_count only on a new sid (R2-L9)', () => {
+  const db = migrated()
+  const now = 1_800_000_000_000
+  const pv = (t: number, pvid: string) => ({ t, type: 'pageview', name: null, u: '/', p: { pvid, path: '/', from: null, kind: 'initial' } })
+
+  persist(db, parseEnvelope(body([pv(now - 1000, PVID_1)]), now)!, { isNew: true, now })
+  const v1 = get(db, 'SELECT first_seen_at, last_seen_at, visit_count, first_entry_path FROM visitors WHERE vid = ?', VID_A)
+  assert.deepEqual([v1.first_seen_at, v1.last_seen_at, v1.visit_count, v1.first_entry_path], [now, now, 1, '/'])
+
+  // A later envelope of the SAME session: last_seen_at moves, visit_count does not.
+  persist(db, parseEnvelope(body([{ t: now + 30_000, type: 'heartbeat', name: null, u: '/', p: { pvid: PVID_1, activeMs: 15_000 } }]), now + 60_000)!, { isNew: false, now: now + 60_000, heartbeats: 1 })
+  const v2 = get(db, 'SELECT first_seen_at, last_seen_at, visit_count FROM visitors WHERE vid = ?', VID_A)
+  assert.deepEqual([v2.first_seen_at, v2.last_seen_at, v2.visit_count], [now, now + 60_000, 1])
+
+  // An OUT-OF-ORDER envelope never pulls last_seen_at backwards (MAX).
+  persist(db, parseEnvelope(body([{ t: now + 100, type: 'find', name: null, u: '/', p: {} }]), now + 1000)!, { isNew: false, now: now + 1000 })
+  assert.equal(get(db, 'SELECT last_seen_at FROM visitors WHERE vid = ?', VID_A).last_seen_at, now + 60_000)
+
+  // A second session of the same visitor counts as a new visit.
+  const sidB = '99999999-9999-4999-8999-999999999999'
+  persist(db, parseEnvelope(body([pv(now + 120_000, PVID_2)], sidB), now + 130_000)!, { isNew: true, now: now + 130_000 })
+  const v3 = get(db, 'SELECT last_seen_at, visit_count FROM visitors WHERE vid = ?', VID_A)
+  assert.deepEqual([v3.last_seen_at, v3.visit_count], [now + 130_000, 2])
+  assert.equal(get(db, 'SELECT visit_n FROM sessions WHERE sid = ?', sidB).visit_n, 2)
+  db.close()
+})
+
+test('entry_path stays the landing page when an out-of-order SPA beacon arrives first (R2-M3)', () => {
+  const db = migrated()
+  const now = 1_800_000_000_000
+  const t0 = now - 5000
+
+  // The SPA beacon is delivered BEFORE the envelope carrying the initial pageview.
+  const late = parseEnvelope(body([
+    { t: t0 + 2000, type: 'page_leave', name: null, u: '/', p: { pvid: PVID_1, path: '/', enteredAt: t0, activeMs: 2000, reason: 'spa' } },
+    { t: t0 + 2001, type: 'pageview', name: null, u: '/employee', p: { pvid: PVID_2, path: '/employee', from: '/', kind: 'spa', softNavMs: 80 } },
+  ]), now)!
+  assert.equal(late.entryPath, null, 'a mid-visit beacon claims no entry path')
+  persist(db, late, { isNew: true, now })
+  assert.equal(get(db, 'SELECT entry_path FROM sessions WHERE sid = ?', SID_A).entry_path, null)
+  assert.equal(get(db, 'SELECT first_entry_path FROM visitors WHERE vid = ?', VID_A).first_entry_path, null)
+
+  const first = parseEnvelope(body([
+    { t: t0, type: 'pageview', name: null, u: '/', p: { pvid: PVID_1, path: '/', from: null, kind: 'initial', referrer: 'https://www.linkedin.com/' } },
+  ]), now + 50)!
+  assert.equal(first.entryPath, '/')
+  persist(db, first, { isNew: false, now: now + 50 })
+  const s = get(db, 'SELECT entry_path, nav_kind, exit_path FROM sessions WHERE sid = ?', SID_A)
+  assert.deepEqual([s.entry_path, s.nav_kind], ['/', 'initial'], 'the landing page fills the first-write column')
+  // exit_path is deliberately RECEIPT-ordered (the envelope with the newest
+  // last_seen_at wins), so the late-delivered landing envelope owns it here —
+  // unchanged by this fix, which only governs entry_path / nav_kind.
+  assert.equal(s.exit_path, '/')
+  db.close()
 })

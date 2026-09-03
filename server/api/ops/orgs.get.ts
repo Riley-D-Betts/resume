@@ -25,7 +25,9 @@ async function build(event: H3Event, q: OpsQuery): Promise<Orgs> {
   const wherePrev = buildWhere(q, prevWindow(w))
   const sort = sortSpec(q, SORTS, 'lastSeen')
   const hideIsp = q.hideIsp === '1'
-  const fetchLimit = hideIsp ? LIMIT * 2 : LIMIT
+  // `kind` comes from the AS name in JS, so HIDE ISP/CLOUD can only filter
+  // after the fetch — pull 1 000 candidates so 200 org rows survive it (R4-L8).
+  const fetchLimit = hideIsp ? 1000 : LIMIT
 
   const res = await batchAll(db, [
     /* 0 */ bindStmt(
@@ -43,7 +45,7 @@ async function build(event: H3Event, q: OpsQuery): Promise<Orgs> {
     /* 1 */ bindStmt(
       db,
       `SELECT ${ORG_EXPR} AS org, json_group_array(DISTINCT n.rdns_host) AS hosts FROM session_net n JOIN sessions s ON s.sid = n.sid `
-        + `WHERE n.rdns_host IS NOT NULL AND ${where.sql} GROUP BY org LIMIT 500`,
+        + `WHERE n.rdns_host IS NOT NULL AND ${where.sql} GROUP BY org ORDER BY org LIMIT 500`,
       where.args,
     ),
     /* 2 */ compare

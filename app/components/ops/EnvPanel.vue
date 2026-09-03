@@ -129,7 +129,10 @@ const groups = computed<Group[]>(() => {
     fact('CORES', e.cores),
     fact('MEMORY', has(e.device_memory) ? `${fmt.str(e.device_memory)} GB` : null),
     fact('JS HEAP', has(e.js_heap_used_mb) || has(e.js_heap_limit_mb) ? `${fmt.str(e.js_heap_used_mb)} / ${fmt.str(e.js_heap_limit_mb)} MB` : null),
-    fact('BATTERY', has(e.battery_level) ? `${Math.round(Number(e.battery_level) * (Number(e.battery_level) <= 1 ? 100 : 1))}%${isOn(e.battery_charging) ? ' · CHARGING' : ''}` : null),
+    // The tracker sends `Math.round(level * 100)` and sanitize clamps it to
+    // 0..100, so the stored value IS the percentage — 1 means 1 %, not 100 %
+    // (R4-L12; the TECHNOLOGY tile reads the same column the same way).
+    fact('BATTERY', has(e.battery_level) ? `${Math.round(Number(e.battery_level))}%${isOn(e.battery_charging) ? ' · CHARGING' : ''}` : null),
     fact('STORAGE', has(e.storage_usage_mb) || has(e.storage_quota_mb) ? `${fmt.str(e.storage_usage_mb)} / ${fmt.str(e.storage_quota_mb)} MB` : null),
     fact('MEDIA', has(e.media_audioinput) || has(e.media_videoinput) || has(e.media_audiooutput) ? `${fmt.str(e.media_audioinput)} MIC · ${fmt.str(e.media_videoinput)} CAM · ${fmt.str(e.media_audiooutput)} OUT` : null),
     fact('VOICES', e.voices),
@@ -196,7 +199,7 @@ const groups = computed<Group[]>(() => {
     ])
   }
 
-  const reasonWord = d.botReason ? { ua: 'UA', honeypot: 'HONEYPOT', verified: 'VERIFIED BOT' }[d.botReason] : null
+  const reasonWord = d.botReason ? { ua: 'UA', honeypot: 'HONEYPOT', verified: 'VERIFIED BOT', flagged: 'FLAGGED' }[d.botReason] : null
   push('FLAGS', [
     has(s.is_bot)
       ? { label: 'BOT', value: isOn(s.is_bot) ? `YES${reasonWord ? ` — ${reasonWord}` : ''}` : 'NO', ...(isOn(s.is_bot) ? { lamp: 'amber' as const } : {}) }

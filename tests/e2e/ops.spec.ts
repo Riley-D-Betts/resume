@@ -28,11 +28,28 @@ test.skip(({ isMobile }) => isMobile, 'ops console is asserted once, on desktop'
 
 // ---------------------------------------------------------------- helpers
 
+/**
+ * JS errors and CSP violations only.
+ *
+ * Chromium logs a console error for every fetch that comes back 4xx/5xx, and
+ * this suite provokes those on purpose — the unauthenticated first load of
+ * /ops (four API calls 401 before the guard redirects to the login form) and
+ * the SQL console's rejected statements. Their outcome is asserted directly
+ * from the response status and the visible state, so the raw "Failed to load
+ * resource" lines are noise here; net::ERR_* (aborted / blocked loads) is
+ * dropped for the same reason. "Blocked script execution … the document's
+ * frame is sandboxed" is the replay iframe REFUSING to run a script out of
+ * the recorded DOM — the sandbox doing its job, logged once per replay. A CSP
+ * violation reads "Refused to …" and is still caught, which is what this
+ * collector exists for (plan A27).
+ */
+const IGNORED_CONSOLE
+  = /net::ERR|Failed to load resource: the server responded with a status of|Blocked script execution in .* because the document's frame is sandboxed/
+
 function collectErrors(page: Page): string[] {
   const errors: string[] = []
   page.on('console', (msg) => {
-    // net::ERR_* messages are aborted/blocked resource loads, not JS errors.
-    if (msg.type() === 'error' && !msg.text().includes('net::ERR')) errors.push(msg.text())
+    if (msg.type() === 'error' && !IGNORED_CONSOLE.test(msg.text())) errors.push(msg.text())
   })
   page.on('pageerror', (err) => errors.push(String(err)))
   return errors
@@ -173,9 +190,11 @@ test('overview: tiles, sparkline, filter bar, live strip, ranges, compare, D1 re
 
   await page.screenshot({ path: path.join(SCREENS_DIR, `ops-overview-${testInfo.project.name}.png`), fullPage: true })
 
-  // Range switching keeps the page error-free and the URL in sync.
+  // Range switching keeps the page error-free and the URL in sync. ALL comes
+  // before 30D on purpose: `all` has no previous period, so COMPARE below
+  // needs the run to end on a bounded range.
   const ranges = page.getByRole('group', RANGE_GROUP)
-  for (const [label, key] of [['24H', '24h'], ['30D', '30d'], ['ALL', 'all']] as const) {
+  for (const [label, key] of [['24H', '24h'], ['ALL', 'all'], ['30D', '30d']] as const) {
     const chip = ranges.getByRole('button', { name: label, exact: true })
     await Promise.all([
       page.waitForResponse(r => r.url().includes('/api/ops/overview') && r.url().includes(`range=${key}`)),
@@ -188,7 +207,9 @@ test('overview: tiles, sparkline, filter bar, live strip, ranges, compare, D1 re
     await expect(statCards.first()).toBeVisible()
   }
 
-  // COMPARE renders a delta on the tiles.
+  // COMPARE renders a delta on the tiles — on `30d`, which has a previous
+  // period to compare against (on `all` there is none and no delta renders).
+  await expect(page).toHaveURL(/range=30d/)
   await Promise.all([
     page.waitForResponse(r => r.url().includes('/api/ops/overview') && r.url().includes('compare=1')),
     page.getByTestId('compare-toggle').click(),
@@ -324,11 +345,47 @@ test('orgs → detail renders tiles and a sessions table', async ({ page, contex
   await expect(page.getByTestId('stat-card').first()).toBeVisible({ timeout: 20_000 })
   await settled(page)
 
+  // R4-M5: the row's `?org=` reached the shared filter state, and the range
+  // the list was on came with it.
+  await expect(page.getByText(/NO ORG SELECTED/)).toHaveCount(0)
+  await expect(page).toHaveURL(/range=all/)
+  await expect(page.getByTestId('filter-org')).not.toHaveValue('')
+
   await expect(page.getByText(/LINK FAULT/)).toHaveCount(0)
   expect(await page.getByTestId('stat-card').count(), 'org detail tiles').toBeGreaterThanOrEqual(4)
   await expect(page.getByText('SESSIONS // NEWEST 100')).toBeVisible()
   await expect(page.getByTestId('session-row').first()).toBeVisible()
   await expect(page.getByTestId('intent-card').first()).toBeVisible()
+
+  expect(errors, `console errors:\n${errors.join('\n')}`).toEqual([])
+})
+
+test('filters ride along: nav strip, drill-down and back (R4-M5)', async ({ page, context }) => {
+  const errors = collectErrors(page)
+  await authed(context)
+  await page.goto('/ops/orgs?range=all&hideIsp=1')
+  await expect(page.getByTestId('org-row').first()).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByTestId('filter-hide-isp')).toHaveAttribute('aria-pressed', 'true')
+
+  // Nav strip: a console link carries the shared filters, it does not reset them.
+  await page.getByRole('navigation', { name: 'Ops console' }).getByRole('link', { name: 'SESSIONS', exact: true }).click()
+  await expect(page).toHaveURL(/\/ops\/sessions\?/, { timeout: 20_000 })
+  await expect(page).toHaveURL(/range=all/)
+  await settled(page)
+  const rangeAll = page.getByRole('group', RANGE_GROUP).getByRole('button', { name: 'ALL', exact: true })
+  await expect(rangeAll).toHaveAttribute('aria-pressed', 'true')
+
+  // Row → session detail: the filters are still on the URL when we land.
+  const row = page.getByTestId('session-row').first()
+  await expect(row).toBeVisible({ timeout: 20_000 })
+  await row.click()
+  await expect(page).toHaveURL(/\/ops\/sessions\/[0-9a-f-]{8,}\?.*range=all/, { timeout: 20_000 })
+
+  // …and back on a list view the range chip is still ALL.
+  await page.goBack()
+  await expect(page).toHaveURL(/\/ops\/sessions\?.*range=all/, { timeout: 20_000 })
+  await settled(page)
+  await expect(page.getByRole('group', RANGE_GROUP).getByRole('button', { name: 'ALL', exact: true })).toHaveAttribute('aria-pressed', 'true')
 
   expect(errors, `console errors:\n${errors.join('\n')}`).toEqual([])
 })
@@ -369,13 +426,29 @@ test('SQL console: comments ok, multi-statement and DELETE rejected, EXPLAIN wor
   const sessionsTable = page.getByTestId('schema-table').filter({ has: page.locator('.sb__name', { hasText: /^sessions$/ }) })
   await expect(sessionsTable).toHaveCount(1, { timeout: 20_000 })
 
-  // Comments are whitespace.
+  // Comments are accepted and STRIPPED before the statement runs, so the
+  // column keeps the expression's own name — SQLite would otherwise call the
+  // unaliased column `1 -- x`, comment and all.
   expect((await runSql(page, 'SELECT 1 -- x')).status()).toBe(200)
   await expect(results).toBeVisible()
   await expect(results.locator('th').first()).toHaveText('1')
   await expect(results.locator('td').first()).toHaveText('1')
   await expect(sqlError).toHaveCount(0)
   await expect(page.getByTestId('sql-status')).toBeVisible()
+
+  // A block comment mid-statement is still just whitespace.
+  expect((await runSql(page, 'SELECT /* mid */ 2 AS two -- trailing')).status()).toBe(200)
+  await expect(results.locator('th').first()).toHaveText('two')
+  await expect(results.locator('td').first()).toHaveText('2')
+  await expect(sqlError).toHaveCount(0)
+
+  // …but a statement that closes a parenthesis it never opened (the trick that
+  // used to comment the LIMIT wrap away) is refused, and so is pragma_*.
+  expect((await runSql(page, 'SELECT * FROM sessions) AS x /*')).status()).toBe(400)
+  await expect(sqlError).toBeVisible()
+  await expect(sqlError).toContainText(/REJECTED/)
+  expect((await runSql(page, "SELECT * FROM pragma_table_info('sessions')")).status()).toBe(400)
+  await expect(sqlError).toContainText(/REJECTED/)
 
   // Baseline count.
   expect((await runSql(page, 'SELECT COUNT(*) AS n FROM sessions')).status()).toBe(200)

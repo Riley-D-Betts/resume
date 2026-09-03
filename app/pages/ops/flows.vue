@@ -61,7 +61,7 @@ const isEmpty = computed(() => {
 
 <template>
   <div class="fl">
-    <FilterBar />
+    <FilterBar :show-compare="false" />
 
     <p v-if="error" class="fl__fault">{{ opsFault(error, 'flows') }}</p>
     <p v-else-if="!data && status === 'pending'" class="fl__poll label">... POLLING</p>

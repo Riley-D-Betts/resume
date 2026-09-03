@@ -170,7 +170,7 @@ const isEmpty = computed(() => Boolean(data.value) && (data.value?.sessions.leng
           row-key="sid"
           row-testid="session-row"
           :sort="{ key: 'started_at', dir: 'desc' }"
-          :row-to="(r: Row) => `/ops/sessions/${String(r.sid)}`"
+          :row-to="(r: Row) => linkTo(`/ops/sessions/${String(r.sid)}`)"
           empty="NO DATA // SESSIONS"
           dense
           :limit="25"
@@ -187,7 +187,7 @@ const isEmpty = computed(() => Boolean(data.value) && (data.value?.sessions.leng
       <Panel title="PATH TIMELINES // PER SESSION">
         <div v-if="timelines.length === 0" class="vd__empty label">NO PAGE VISITS RECORDED</div>
         <div v-for="t in timelines" :key="t.sid" class="vd__timeline">
-          <NuxtLink :to="`/ops/sessions/${t.sid}`" class="vd__tl-head label">
+          <NuxtLink :to="linkTo(`/ops/sessions/${t.sid}`)" class="vd__tl-head label">
             {{ fmt.full(t.startedAt) }} · SESSION {{ t.sid.slice(0, 8).toUpperCase() }} · {{ t.pages.length }} PAGE{{ t.pages.length === 1 ? '' : 'S' }}
           </NuxtLink>
           <PathTimeline :pages="t.pages" :start-ts="t.startedAt" :path-to="(p: string) => linkTo('/ops/pages/detail', { path: p })" />

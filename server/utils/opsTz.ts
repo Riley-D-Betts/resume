@@ -146,19 +146,25 @@ export function localMsSql(col: string, segs: TzSegment[]): SqlFragment {
   return { sql: `(${col} + CASE ${whens.join(' ')} ELSE ? END)`, args }
 }
 
-/** Owner-tz day index (days since 1970-01-01 in local time) of a local-ms expression. */
+/**
+ * Owner-tz day index (days since 1970-01-01 in local time) of a local-ms
+ * expression. The CAST is what keeps it an INTEGER: a column SQLite decided
+ * to hold as REAL (or a NULL-coalesced expression) turns `/` into float
+ * division, and `2026-03-08` would come back as `20520.958…` — a day bucket
+ * that matches nothing (R4-M2).
+ */
 export function daySql(localMs: string): string {
-  return `(${localMs} / ${TZ_DAY_MS})`
+  return `CAST(${localMs} / ${TZ_DAY_MS} AS INTEGER)`
 }
 
 /** 0..23 local hour of a local-ms expression. */
 export function hourSql(localMs: string): string {
-  return `((${localMs} / ${TZ_HOUR_MS}) % 24)`
+  return `(CAST(${localMs} / ${TZ_HOUR_MS} AS INTEGER) % 24)`
 }
 
 /** 0 = Sunday … 6 = Saturday of a local-ms expression (1970-01-01 was a Thursday). */
 export function dowSql(localMs: string): string {
-  return `(((${localMs} / ${TZ_DAY_MS}) + 4) % 7)`
+  return `((CAST(${localMs} / ${TZ_DAY_MS} AS INTEGER) + 4) % 7)`
 }
 
 export function dayIdxOf(tz: string, atMs: number): number {

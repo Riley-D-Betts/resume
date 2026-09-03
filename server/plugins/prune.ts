@@ -1,5 +1,6 @@
 import type { D1Database, D1PreparedStatement, D1Result, R2Bucket } from '@cloudflare/workers-types'
 import type { CfBindings } from '../utils/db'
+import { planPruneBands } from '../utils/d1'
 import { REPLAY_PREFIX, parseReplayKey, replayKey, replayKeyPair, sessionPrefix } from '../utils/replayKeys'
 
 /**
@@ -21,7 +22,6 @@ const REPLAY_CAP_BYTES = 2 * 1024 * 1024 * 1024 // 2 GB total for replay chunks
 const SUBREQUEST_BUDGET = 40
 const MAX_LOOP = 8
 const PENDING_GRACE_MS = 10 * 60 * 1000
-const MIN_BANDS = 2
 
 /** Subrequest ledger: stops the run at the budget and records the carry-over. */
 class Budget {
@@ -73,6 +73,11 @@ async function all<T>(ctx: Ctx, label: string, stmt: D1PreparedStatement): Promi
   return await stmt.all<T>()
 }
 
+async function firstRow<T>(ctx: Ctx, label: string, stmt: D1PreparedStatement): Promise<T | null> {
+  if (!ctx.budget.take(label)) throw new BudgetExhausted(label)
+  return await stmt.first<T>()
+}
+
 async function batch(ctx: Ctx, label: string, stmts: D1PreparedStatement[]): Promise<D1Result[]> {
   if (stmts.length === 0) return []
   if (!ctx.budget.take(label)) throw new BudgetExhausted(label)
@@ -114,23 +119,43 @@ async function step(name: string, fn: () => Promise<void>): Promise<boolean> {
 }
 
 /**
- * Delete by rolling 48 h session bands below `cutoff`: band k covers
- * [cutoff − 48 h·(k+1), cutoff − 48 h·k). Always ≥ MIN_BANDS, then continues
- * (≤ MAX_LOOP) while a band still deleted something, so a missed night drains
- * over the following runs.
+ * Delete in rolling 48 h bands, walking UPWARD from the oldest un-pruned row
+ * (audit R2-H1). `anchorSql` is one indexed read returning `oldest` — the
+ * smallest value of the BAND'S OWN column that is still below `cutoff` — and
+ * `planPruneBands` turns it into at most MAX_LOOP contiguous [lo, hi) bands
+ * ending at `cutoff`.
+ *
+ * The old walk started at the cutoff and stopped at the first empty band, so
+ * it could never reach further than MAX_LOOP × 48 h = 16 days below it: a
+ * lowered NUXT_EVENT_RETENTION_DAYS, a first deploy over old data or more than
+ * 16 missed nights left a permanent backlog while the log said `changes=0`.
+ * Anchored on the oldest row, every run starts where the data actually begins
+ * and drains up to 16 days of backlog per night.
+ *
+ * Every call is still budget-counted: 1 anchor read + ≤ MAX_LOOP batches.
  */
-async function bands(ctx: Ctx, label: string, cutoff: number, make: (lo: number, hi: number) => D1PreparedStatement[]): Promise<void> {
+async function bands(
+  ctx: Ctx,
+  label: string,
+  cutoff: number,
+  anchorSql: string,
+  make: (lo: number, hi: number) => D1PreparedStatement[],
+): Promise<void> {
   const total: Meta = { changes: 0, rows_read: 0 }
-  let k = 0
-  for (; k < MAX_LOOP; k++) {
-    const hi = cutoff - BAND_MS * k
-    const lo = hi - BAND_MS
+  const row = await firstRow<{ oldest: number | null }>(ctx, label, ctx.db.prepare(anchorSql).bind(cutoff))
+  const anchor = row?.oldest ?? null
+  const plan = planPruneBands(anchor, cutoff, MAX_LOOP, BAND_MS)
+  for (const { lo, hi } of plan) {
     const m = sumMeta(await batch(ctx, label, make(lo, hi)))
     total.changes += m.changes
     total.rows_read += m.rows_read
-    if (k + 1 >= MIN_BANDS && m.changes === 0) break
   }
-  log(label, total, `bands=${Math.min(k + 1, MAX_LOOP)}`)
+  const backlogDays = anchor === null ? 0 : Math.max(0, Math.round(((cutoff - anchor) / DAY_MS) * 10) / 10)
+  log(
+    label,
+    total,
+    `anchor=${anchor === null ? 'none' : new Date(anchor).toISOString()} backlog_days=${backlogDays} bands=${plan.length}${plan.length === MAX_LOOP ? ' (more next run)' : ''}`,
+  )
 }
 
 interface ChunkRow {
@@ -177,20 +202,50 @@ async function pruneOnce(env: CfBindings): Promise<void> {
       }
       log('replay_retention', total, `objects=${objects}`)
     }],
-    // 2. Events past eventRetentionDays, via session bands (idx_sessions_started + idx_events_sid_ts).
-    ['events_retention', () => bands(ctx, 'events_retention', eventCutoff, (lo, hi) => [
-      db.prepare('DELETE FROM events WHERE sid IN (SELECT sid FROM sessions WHERE started_at >= ? AND started_at < ?)').bind(lo, hi),
-    ])],
-    // 3. page_perf past eventRetentionDays (idx_page_perf_ts).
-    ['page_perf_retention', () => bands(ctx, 'page_perf_retention', eventCutoff, (lo, hi) => [
-      db.prepare('DELETE FROM page_perf WHERE ts >= ? AND ts < ?').bind(lo, hi),
-    ])],
-    // 4. Side tables past sideTableRetentionDays.
-    ['side_tables_retention', () => bands(ctx, 'side_tables_retention', sideCutoff, (lo, hi) => [
-      db.prepare('DELETE FROM page_visits WHERE sid IN (SELECT sid FROM sessions WHERE started_at >= ? AND started_at < ?)').bind(lo, hi),
-      db.prepare('DELETE FROM session_env WHERE sid IN (SELECT sid FROM sessions WHERE started_at >= ? AND started_at < ?)').bind(lo, hi),
-      db.prepare('DELETE FROM session_net WHERE sid IN (SELECT sid FROM sessions WHERE started_at >= ? AND started_at < ?)').bind(lo, hi),
-    ])],
+    // 2. Events past eventRetentionDays, via session bands (idx_sessions_started
+    //    + idx_events_sid_ts). The anchor must be in the band's own units, so
+    //    it is the oldest session below the cutoff that STILL HAS events —
+    //    MIN(events.ts) would sit above its own session's started_at and the
+    //    first band could miss it, stalling the walk forever. `ORDER BY
+    //    started_at LIMIT 1` walks idx_sessions_started from the oldest and
+    //    stops at the first hit (EXISTS is a covering probe), so a backlog run
+    //    exits immediately and a drained one costs one index pass.
+    ['events_retention', () => bands(
+      ctx,
+      'events_retention',
+      eventCutoff,
+      'SELECT started_at AS oldest FROM sessions WHERE started_at < ? AND EXISTS (SELECT 1 FROM events e WHERE e.sid = sessions.sid) ORDER BY started_at LIMIT 1',
+      (lo, hi) => [
+        db.prepare('DELETE FROM events WHERE sid IN (SELECT sid FROM sessions WHERE started_at >= ? AND started_at < ?)').bind(lo, hi),
+      ],
+    )],
+    // 3. page_perf past eventRetentionDays (idx_page_perf_ts covers both the
+    //    anchor and the band).
+    ['page_perf_retention', () => bands(
+      ctx,
+      'page_perf_retention',
+      eventCutoff,
+      'SELECT MIN(ts) AS oldest FROM page_perf WHERE ts < ?',
+      (lo, hi) => [
+        db.prepare('DELETE FROM page_perf WHERE ts >= ? AND ts < ?').bind(lo, hi),
+      ],
+    )],
+    // 4. Side tables past sideTableRetentionDays. Same shape as step 2:
+    //    session_net is written for every session on its first envelope (1:1),
+    //    so the oldest session that still has one is exactly the oldest
+    //    un-pruned band — and page_visits / session_env of that session go with
+    //    it in the same atomic batch.
+    ['side_tables_retention', () => bands(
+      ctx,
+      'side_tables_retention',
+      sideCutoff,
+      'SELECT started_at AS oldest FROM sessions WHERE started_at < ? AND EXISTS (SELECT 1 FROM session_net n WHERE n.sid = sessions.sid) ORDER BY started_at LIMIT 1',
+      (lo, hi) => [
+        db.prepare('DELETE FROM page_visits WHERE sid IN (SELECT sid FROM sessions WHERE started_at >= ? AND started_at < ?)').bind(lo, hi),
+        db.prepare('DELETE FROM session_env WHERE sid IN (SELECT sid FROM sessions WHERE started_at >= ? AND started_at < ?)').bind(lo, hi),
+        db.prepare('DELETE FROM session_net WHERE sid IN (SELECT sid FROM sessions WHERE started_at >= ? AND started_at < ?)').bind(lo, hi),
+      ],
+    )],
     // 5. Replay storage cap: oldest sessions die first until under 2 GB.
     ['replay_cap', async () => {
       const res = await all<{ sid: string; size: number; oldest: number }>(
