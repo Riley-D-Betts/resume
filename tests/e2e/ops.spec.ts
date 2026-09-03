@@ -330,6 +330,56 @@ test('sessions → the seeded replay session: timeline, env, path, a mounted rrw
   expect(errors, `console errors:\n${errors.join('\n')}`).toEqual([])
 })
 
+test('replay: FULL SCREEN falls back to an overlay where the Fullscreen API is missing (iPhone)', async ({ page, context }) => {
+  const errors = collectErrors(page)
+  await authed(context)
+
+  // iPhone Safari implements the Fullscreen API on <video> only, so a <div>
+  // has no requestFullscreen at all and the stock player's button is a silent
+  // no-op there. Reproduce that shape by removing the API before any script
+  // runs, then prove our control still fills the viewport.
+  await page.addInitScript(() => {
+    // @ts-expect-error deleting an optional DOM method on purpose
+    delete Element.prototype.requestFullscreen
+    // @ts-expect-error vendor-prefixed twin, absent on iPhone too
+    delete Element.prototype.webkitRequestFullscreen
+    Object.defineProperty(document, 'fullscreenElement', { get: () => null, configurable: true })
+  })
+
+  const list = await page.request.get('/api/ops/sessions?replay=1&range=all&limit=1')
+  const body = (await list.json()) as { rows: { sid: string }[] }
+  expect(body.rows.length, 'a session with a replay exists (run the seed)').toBeGreaterThan(0)
+  await page.goto(`/ops/sessions/${body.rows[0]!.sid}`)
+
+  const player = page.getByTestId('replay-player')
+  await expect(player.locator('.rr-player')).toBeVisible({ timeout: 30_000 })
+
+  // The stock button is hidden; ours is the one on screen.
+  const button = page.getByTestId('replay-fullscreen')
+  await expect(button).toHaveText('FULL SCREEN')
+  await expect(button).toHaveAttribute('aria-pressed', 'false')
+
+  await button.click()
+  await expect(player).toHaveClass(/replay--overlay/)
+  await expect(button).toHaveText('EXIT FULL SCREEN')
+
+  // It genuinely covers the viewport, and the player grew with it.
+  const viewport = page.viewportSize()!
+  const boxFull = (await player.boundingBox())!
+  expect(boxFull.width, 'overlay spans the viewport width').toBeGreaterThanOrEqual(viewport.width - 1)
+  expect(boxFull.height, 'overlay spans the viewport height').toBeGreaterThanOrEqual(viewport.height - 1)
+  const playerBox = (await player.locator('.rr-player').boundingBox())!
+  expect(playerBox.height, 'the player was resized into the taller box').toBeGreaterThan(300)
+  expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).toBe('hidden')
+
+  await button.click()
+  await expect(player).not.toHaveClass(/replay--overlay/)
+  await expect(button).toHaveText('FULL SCREEN')
+  expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).not.toBe('hidden')
+
+  expect(errors, `console errors:\n${errors.join('\n')}`).toEqual([])
+})
+
 // ---------------------------------------------------------------- 6. orgs / pages drill-down
 
 test('orgs → detail renders tiles and a sessions table', async ({ page, context }) => {
