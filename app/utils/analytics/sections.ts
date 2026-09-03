@@ -23,7 +23,7 @@ export interface Sections {
   rearm: () => void
   /** Emit exits for every open section (hidden, pagehide, SPA leave). */
   forceExit: () => void
-  /** Drop pending / open state silently (session rotation, bfcache restore). */
+  /** Close every open section (as a pair) and drop pending candidates (session rotation, bfcache restore). */
   reset: () => void
 }
 
@@ -104,10 +104,10 @@ export function createSections(core: Core, visit: () => Visit): Sections {
       for (const s of state.values()) exit(s)
     },
     reset() {
-      for (const s of state.values()) {
-        cancel(s)
-        s.enteredAt = undefined
-      }
+      // L7: an open section still owes its exit — dropping `enteredAt` here
+      // left an orphan `section_enter` with no dwell. `exit()` cancels the
+      // pending candidate and honours the 500 ms pair rule.
+      for (const s of state.values()) exit(s)
     },
   }
 }

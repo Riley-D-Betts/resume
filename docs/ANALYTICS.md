@@ -164,7 +164,7 @@ rejects anything else. Every event carries `t` (client clock, order only),
 | `visibility` | tab hidden / shown | `state`, `ms`; hidden snapshots carry `pvid`, `activeMs`, `maxScrollPct` |
 | `section_enter` / `section_exit` | a `[data-section]` sub-block is ≥ 50 % visible or fills ≥ 60 % of the viewport, for ≥ 500 ms | `dwellMs`, `pvid` on exit — enter is deferred 500 ms so the two are always a pair |
 | `scroll_depth` | 25 / 50 / 75 / 90 / 100 % per visit | `pct` |
-| `click` | any primary `pointerdown` or keyboard activation | selector path, text (60), x / y, `section` / `zone`, tag, `button` (0 / 1 / 2), `kind` (pointer / touch / pen / keyboard), `href`, modifier |
+| `click` | a primary mouse or pen `pointerdown`, a touch confirmed by `pointerup` on the same element, or a keyboard activation | selector path, text (60), x / y, `section` / `zone`, tag, `button` (0 / 1 / 2), `kind` (pointer / touch / pen / keyboard), `href`, modifier |
 | `rage_click` | 3+ clicks within 700 ms and 30 px | `n`, selector, section |
 | `dead_click` | a click on nothing interactive that changed nothing in 400 ms | selector, text, section |
 | `outbound` | a link to another origin **or** `mailto:` / `tel:` | `name` = host / `mailto` / `tel`; href (subject / body stripped), label, section / zone, `newTab` — followed by a keepalive flush |
@@ -189,8 +189,11 @@ Per-visit caps (`PAGE_CAPS`) bound the chatty types (100 clicks, 5 scroll
 milestones, 20 copies …) and a per-session budget of **400 stored event
 rows** (`SESSION_EVENT_CAP`) lets only `ESSENTIAL_TYPES` (pageview,
 page_leave, vitals, perf, js_error, form, outbound, heartbeat) through
-afterwards. The client counts in `sessionStorage.rb_ev_n` as a courtesy;
-the server enforces it from `sessions.events_n`.
+afterwards. Only types that actually become rows spend the budget:
+`heartbeat`, `env`, `vitals` and `perf` merge into typed columns, so they
+are free. The client counts in `sessionStorage.rb_ev_n`, keyed as
+`<sid>:<n>` so a new session never inherits the previous one's count; the
+server enforces the real limit from `sessions.events_n`.
 
 ### The `env` probe
 
@@ -245,7 +248,10 @@ makes the tracker stay silent for browsers with `navigator.globalPrivacyControl`
   (`rid`); chunks are keyed `(sid, rid, seq)` with the page's
   `performance.timeOrigin` as `page_started_at`. A reload or a second tab
   inside the 30-minute session therefore becomes a *second segment*
-  instead of overwriting the first one's `seq 0`.
+  instead of overwriting the first one's `seq 0`. A session id rotation
+  (a 30-minute idle gap, or another tab's newer id) mints a new `rid`,
+  resets `seq` to 0 and takes a fresh full snapshot, so the chunks that
+  follow it are playable under the new session rather than orphaned.
 - **Privacy defaults.** `maskAllInputs: true` (keystrokes are `*`),
   `slimDOM`, plus an `rr-block` class to redact any element wholesale.
 - **Chunked uploads.** Events buffer in memory and ship to

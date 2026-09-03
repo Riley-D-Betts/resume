@@ -208,10 +208,17 @@ function tasks(a: Accum): { count: number; totalMs: number; longestMs: number } 
   return { count: a.count, totalMs: r(a.totalMs), longestMs: r(a.longestMs) }
 }
 
+/**
+ * `perf` is emitted at `load` + 3 s, but a hide can force it earlier — before
+ * `loadEventEnd` exists. L10: report that as "unknown" rather than a 0 ms load
+ * that drags every load-time percentile down. `PerfNav.load` is nullable on the
+ * wire contract for exactly this case; the server's `asInt` stores NULL.
+ */
 function perfPayload(core: Core, pvid: string): PerfP | null {
   const n = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined
   if (!n) return null
   const tls = n.secureConnectionStart > 0 ? n.connectEnd - n.secureConnectionStart : 0
+  const loadMs = n.loadEventEnd || n.loadEventStart || 0
   const p: PerfP = {
     pvid,
     nav: {
@@ -222,7 +229,7 @@ function perfPayload(core: Core, pvid: string): PerfP | null {
       response: r(n.responseEnd - n.responseStart),
       domInteractive: r(n.domInteractive),
       dcl: r(n.domContentLoadedEventEnd),
-      load: r(n.loadEventEnd || n.loadEventStart || 0),
+      load: loadMs > 0 ? r(loadMs) : null,
       transfer: n.transferSize || 0,
       encoded: n.encodedBodySize || 0,
       decoded: n.decodedBodySize || 0,
@@ -236,7 +243,9 @@ function perfPayload(core: Core, pvid: string): PerfP | null {
   if (core.early.loafSupported) {
     p.loaf = { ...tasks(core.early.loaf), ...(core.early.loafScript ? { script: core.early.loafScript } : {}) }
   }
-  return p
+  // The only difference from PerfP is the nullable `load` the contract types as
+  // a number; the ingest reads it with `asInt`, which maps null to a NULL column.
+  return p as PerfP
 }
 
 /**

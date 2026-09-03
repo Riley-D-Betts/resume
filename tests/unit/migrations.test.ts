@@ -127,9 +127,7 @@ function leadingIndexColumns(db: DatabaseSync, table: string): Set<string> {
 
 function migrated(): DatabaseSync {
   const db = fresh()
-  apply(db, 1)
-  apply(db, 2)
-  apply(db, 3)
+  for (let n = 1; n <= files.length; n++) apply(db, n)
   return db
 }
 
@@ -141,16 +139,27 @@ INSERT INTO t VALUES ('it''s;'); -- trailing; comment
   assert.deepEqual(parts, ["CREATE TABLE t (a TEXT DEFAULT 'x;y')", "INSERT INTO t VALUES ('it''s;')"])
 })
 
-test('exactly the three migration files exist, numbered 0001..0003', () => {
+test('exactly the four migration files exist, numbered 0001..0004', () => {
   assert.deepEqual(
     files.map((f) => f.slice(0, 4)),
-    ['0001', '0002', '0003'],
+    ['0001', '0002', '0003', '0004'],
   )
   assert.equal(files[1], '0002_side_tables.sql')
   assert.equal(files[2], '0003_session_columns.sql')
+  assert.equal(files[3], '0004_export_indexes.sql')
 })
 
-test('0001 → 0002 → 0003 apply on a fresh database with foreign keys on', () => {
+test('0004 creates the two export keyset indexes', () => {
+  const db = migrated()
+  const idx = db
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('idx_events_ts', 'idx_page_visits_entered') ORDER BY name")
+    .all()
+    .map((r: { name: string }) => r.name)
+  assert.deepEqual(idx, ['idx_events_ts', 'idx_page_visits_entered'])
+  db.close()
+})
+
+test('0001 → 0004 apply on a fresh database with foreign keys on', () => {
   const db = migrated()
   const names = tables(db)
   for (const t of [

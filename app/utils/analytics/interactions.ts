@@ -23,15 +23,61 @@ const FIND_DEBOUNCE_MS = 1_000
 const CLICK_TEXT = 'a,button,[role=button],summary,label,input,select,option'
 /** A pointerdown without one of these ancestors is a dead-click candidate. */
 const INTERACTIVE = 'a,button,input,select,textarea,label,summary,[role=button],[contenteditable],[tabindex]'
-/** Enter / Space activate these from the keyboard. */
+/** Enter activates these from the keyboard. */
 const KEY_ACTIVATABLE =
   'a[href],button,[role=button],summary,input[type=button],input[type=submit],input[type=checkbox],input[type=radio]'
-/** Copy / select are never captured inside these (D18). */
-const EXCLUDED = 'input,textarea,[contenteditable]'
+/** Space activates the button-like subset — it scrolls the page on a link (L4). */
+const SPACE_ACTIVATABLE =
+  'button,[role=button],summary,input[type=button],input[type=submit],input[type=checkbox],input[type=radio]'
+/** Copy / select are never captured inside these (D18); `contenteditable="false"` is ordinary text (L10). */
+const EXCLUDED = 'input,textarea,[contenteditable]:not([contenteditable="false"])'
 const FIELD = 'input,select,textarea'
 const HOVER_KEY_RE = /^(email|github|contact-cta|kpi:[a-z0-9-]{1,30})$/
+/** Attributes whose change means the page reacted to a click (M4). */
+const DEAD_ATTRS = ['class', 'style', 'hidden', 'aria-expanded', 'aria-selected', 'open']
+/** A resize this far below the height (and no width change) is a URL bar or a keyboard (M5). */
+const VIEWPORT_MIN_H_RATIO = 0.25
 
 const text = (el: Element, max: number): string => (el.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, max)
+
+/** A touch waiting for its `pointerup` (H1). */
+interface Tap {
+  id: number
+  target: Element
+  button: 0 | 1 | 2
+  x: number
+  y: number
+  mod: boolean
+  /** Ctrl / Cmd — the `outbound` new-tab hint. */
+  ctrl: boolean
+}
+
+/**
+ * `click.href` for a link: the same-origin **pathname**, which is all the
+ * server's whitelist accepts (`asPath`), so the clicks-per-page view can name
+ * the link. Cross-origin, `mailto:` and `tel:` return null — the `outbound`
+ * event already carries those, and an absolute URL here only stored a NULL (H2).
+ */
+export function clickHref(href: string, baseHref: string): string | null {
+  try {
+    const url = new URL(href, baseHref)
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null
+    if (url.origin !== new URL(baseHref).origin) return null
+    return url.pathname.slice(0, 200)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * True when a resize is worth an event. Mobile browsers fire `resize` when the
+ * URL bar collapses or the keyboard opens — same width, a modest height change
+ * — and scrolling a page would otherwise fill the table with junk rows (M5).
+ */
+export function viewportChanged(prev: { w: number; h: number }, next: { w: number; h: number }): boolean {
+  if (next.w !== prev.w) return true
+  return Math.abs(next.h - prev.h) >= Math.max(1, prev.h) * VIEWPORT_MIN_H_RATIO
+}
 
 const sectionOf = (el: Element): string | undefined =>
   el.closest<HTMLElement>('[data-section]')?.dataset.section || undefined
@@ -42,12 +88,6 @@ function place(el: Element): { section?: string; zone?: string } {
   if (section) return { section }
   const zone = el.closest<HTMLElement>('[data-zone]')?.dataset.zone
   return zone ? { zone } : {}
-}
-
-/** `mailto:` / `tel:` hrefs are reduced to scheme + address so a subject/body never leaks. */
-function anchorHref(a: HTMLAnchorElement): string {
-  const href = a.href
-  return /^(mailto|tel):/i.test(href) ? href.split('?')[0]! : href
 }
 
 export function setupInteractions(core: Core, pages: Pages): void {
@@ -92,7 +132,15 @@ export function setupInteractions(core: Core, pages: Pages): void {
     mo = new MutationObserver(() => {
       mutations++
     })
-    mo.observe(root, { childList: true, subtree: true, characterData: true })
+    // M4: collapsing a portlet only toggles a class — without the attribute
+    // filter that reaction looked like nothing happened, i.e. a dead click.
+    mo.observe(root, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: DEAD_ATTRS,
+    })
   }
 
   // -- click / rage / dead / outbound -------------------------------------------
@@ -119,7 +167,8 @@ export function setupInteractions(core: Core, pages: Pages): void {
       ...place(target),
     }
     const a = target.closest<HTMLAnchorElement>('a[href]')
-    if (a) p.href = anchorHref(a).slice(0, 200)
+    const href = a ? clickHref(a.href, location.href) : null
+    if (href !== null) p.href = href
     pages.visit().clicks++
     track('click', null, p)
   }
@@ -197,6 +246,34 @@ export function setupInteractions(core: Core, pages: Pages): void {
     core.flush('keepalive') // the navigation may unload the page before the next tick
   }
 
+  /** click + rage + dead + outbound for one activation. */
+  const commit = (
+    target: Element,
+    button: 0 | 1 | 2,
+    kind: ClickP['kind'],
+    x: number,
+    y: number,
+    mod: boolean,
+    ctrl: boolean,
+  ): void => {
+    emitClick(target, button, kind, x, y, mod)
+    if (button === 0) {
+      rage(target, x, y, performance.now())
+      dead(target)
+    }
+    if (button !== 2) outbound(target, button, ctrl)
+  }
+
+  /**
+   * H1: a touch scroll starts with a `pointerdown` on whatever is under the
+   * thumb and is then cancelled, so committing on the down event turned
+   * thumb-scrolling into clicks, dead clicks and — over the contact page's
+   * mailto link — an outbound mail handoff nobody made. A touch is therefore
+   * only a tap once its `pointerup` lands on the same target uncancelled.
+   * Mouse and pen still commit on `pointerdown` (that is when they act).
+   */
+  let tap: Tap | null = null
+
   doc.addEventListener(
     'pointerdown',
     safe((ev: PointerEvent) => {
@@ -213,15 +290,32 @@ export function setupInteractions(core: Core, pages: Pages): void {
       const x = Math.round(ev.clientX)
       const y = Math.round(ev.clientY)
       const mod = ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey
-      emitClick(target, button, kind, x, y, mod)
-      if (button === 0) {
-        rage(target, x, y, performance.now())
-        dead(target)
+      const ctrl = ev.ctrlKey || ev.metaKey
+      if (kind === 'touch') {
+        tap = { id: ev.pointerId, target, button, x, y, mod, ctrl }
+        return
       }
-      if (button !== 2) outbound(target, button, ev.ctrlKey || ev.metaKey)
+      commit(target, button, kind, x, y, mod, ctrl)
     }),
     { capture: true, passive: true },
   )
+
+  doc.addEventListener(
+    'pointerup',
+    safe((ev: PointerEvent) => {
+      const t = tap
+      tap = null
+      if (!t || ev.pointerId !== t.id || ev.target !== t.target) return
+      commit(t.target, t.button, 'touch', t.x, t.y, t.mod, t.ctrl)
+    }),
+    { capture: true, passive: true },
+  )
+
+  // The browser cancels the pointer the moment it starts scrolling.
+  const dropTap = safe((ev: PointerEvent) => {
+    if (tap && tap.id === ev.pointerId) tap = null
+  })
+  doc.addEventListener('pointercancel', dropTap, { capture: true, passive: true })
 
   // -- keyboard: activation clicks + find ------------------------------------------
   let lastFind = -Infinity
@@ -239,8 +333,11 @@ export function setupInteractions(core: Core, pages: Pages): void {
         return
       }
       if (ev.key !== 'Enter' && ev.key !== ' ') return
+      // L4: a held key repeats; only the first press is an activation.
+      if (ev.repeat) return
       const target = ev.target
-      if (!(target instanceof Element) || !target.matches(KEY_ACTIVATABLE)) return
+      // L4: Space scrolls a link, it does not follow it.
+      if (!(target instanceof Element) || !target.matches(ev.key === ' ' ? SPACE_ACTIVATABLE : KEY_ACTIVATABLE)) return
       const r = target.getBoundingClientRect()
       const mod = ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey
       emitClick(target, 0, 'keyboard', Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2), mod)
@@ -259,12 +356,17 @@ export function setupInteractions(core: Core, pages: Pages): void {
       hover = null
       if (ms >= HOVER_MIN_MS) track('hover', key, { ms })
     }
+    // L3: a navigation (or a re-render) removes the hovered element, and its
+    // `mouseout` never arrives — the dwell would then be attributed to the
+    // next page, or run until the next hover replaced it.
+    pages.onVisitEnd(endHover)
     doc.addEventListener(
       'mouseover',
       safe((ev: MouseEvent) => {
         const t = ev.target
         if (!(t instanceof Element)) return
         const el = t.closest<HTMLElement>('[data-track-hover]')
+        if (hover && !hover.el.isConnected) endHover()
         if (hover && hover.el === el) return
         endHover()
         const key = el?.dataset.trackHover ?? ''
@@ -374,7 +476,9 @@ export function setupInteractions(core: Core, pages: Pages): void {
       return innerWidth >= innerHeight ? 'landscape-primary' : 'portrait-primary'
     }
   }
+  let lastSize = { w: innerWidth, h: innerHeight }
   const emitViewport = (cause: ViewportP['cause']): void => {
+    lastSize = { w: innerWidth, h: innerHeight }
     track('viewport', null, {
       w: innerWidth,
       h: innerHeight,
@@ -394,9 +498,12 @@ export function setupInteractions(core: Core, pages: Pages): void {
       resizeTimer = window.setTimeout(
         safe(() => {
           if (performance.now() - orientedAt < VIEWPORT_DEBOUNCE_MS * 2) return
-          const cause = devicePixelRatio !== lastDpr ? 'zoom' : 'resize'
+          const zoomed = devicePixelRatio !== lastDpr
+          // M5: a collapsing URL bar / an opening keyboard resizes the height
+          // only, and only a little — that is scrolling, not a viewport change.
+          if (!zoomed && !viewportChanged(lastSize, { w: innerWidth, h: innerHeight })) return
           lastDpr = devicePixelRatio
-          emitViewport(cause)
+          emitViewport(zoomed ? 'zoom' : 'resize')
         }),
         VIEWPORT_DEBOUNCE_MS,
       )
