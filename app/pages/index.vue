@@ -147,7 +147,7 @@ const locked = () => toast.show('This dashboard is Locked — content and layout
         <NsPortlet title="Report Snapshots" section="home.report">
           <NsReport :rows="d.report.rows" />
           <template #foot>
-            <NuxtLink to="/employee">Skills Coverage by Discipline — view full report</NuxtLink>
+            <NuxtLink to="/employee">{{ d.report.title }} — view full report</NuxtLink>
           </template>
         </NsPortlet>
       </div>

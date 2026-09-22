@@ -43,7 +43,7 @@ const rows = computed(() =>
 
     <NsPageTitle
       title="Projects"
-      subtitle="Side builds — hardware for the kids, software for the plant and beyond."
+      subtitle="Two NetSuite go-lives rescued, a plant-floor app on the NetSuite REST API, and the side builds in between."
     />
 
     <div class="ns-buttonbar" data-zone="record-actions">

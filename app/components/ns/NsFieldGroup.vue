@@ -33,7 +33,7 @@ function hoverKey(href: string): string | undefined {
             <a
               v-else
               :href="f.href"
-              :target="f.href.startsWith('mailto:') ? undefined : '_blank'"
+              :target="/^(mailto|tel):/.test(f.href) ? undefined : '_blank'"
               rel="noopener"
               :data-track-hover="hoverKey(f.href)"
               >{{ f.value }}</a

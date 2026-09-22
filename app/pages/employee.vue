@@ -7,7 +7,7 @@ const emp = resume.employee
 const toast = useToast()
 
 const actions = [
-  { label: 'Send Email', href: 'mailto:rbetts@idamilk.com' },
+  { label: 'Send Email', href: `mailto:${resume.contact.email}` },
   { label: 'View Employment History', to: '/positions' },
   { label: 'Make Copy', toast: 'There is only one of him.' },
 ]
@@ -16,9 +16,10 @@ const actions = [
 // actor is the system or Riley himself, never an invented colleague
 const systemNotes = [
   { date: '11/18/2024', field: 'Employee', change: 'created → Active', by: 'System' },
-  { date: '11/18/2024', field: 'Job Title', change: '— → IT Supervisor', by: 'System' },
-  { date: '2025', field: 'Job Title', change: 'IT Supervisor → Information Technology Manager', by: 'System' },
-  { date: '2025', field: 'Role', change: 'User → Administrator', by: 'System' },
+  { date: '11/18/2024', field: 'Job Title', change: '— → NetSuite Administrator', by: 'System' },
+  { date: '11/18/2024', field: 'Role', change: 'User → Administrator', by: 'System' },
+  { date: '11/2025', field: 'Job Title', change: 'NetSuite Administrator → NetSuite / IT Manager', by: 'System' },
+  { date: '11/2025', field: 'Direct Reports', change: '0 → 2', by: 'Riley Betts' },
 ]
 
 const readOnly = () => toast.show('This record is read-only — you have look-but-don’t-touch Administrator access.')
