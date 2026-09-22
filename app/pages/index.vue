@@ -70,6 +70,10 @@ const locked = () => toast.show('This dashboard is Locked — content and layout
           </template>
         </NsPortlet>
 
+        <NsPortlet :title="resume.eggs.cycleCount.title" section="home.cyclecount">
+          <NsCycleCount />
+        </NsPortlet>
+
         <NsPortlet title="Settings" :refreshable="false" section="home.settings">
           <ul class="ns-links">
             <button type="button" class="ns-links__item" style="text-align: left; width: 100%" @click="locked">

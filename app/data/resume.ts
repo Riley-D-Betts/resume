@@ -173,6 +173,30 @@ export interface ColophonContent {
   deployments: ColophonDeployment[]
 }
 
+/* ---- the Cycle Count portlet (home dashboard easter egg) ----- */
+export interface CycleCountCopy {
+  /** portlet title — reads like any other Bettsuite portlet */
+  title: string
+  /** the count's transaction id, shown in the status line */
+  countId: string
+  /** item names dealt onto the bins; at least nine */
+  items: string[]
+  /** status-line labels per phase */
+  status: { idle: string; running: string; done: string }
+  /** idle copy under the grid */
+  idle: string
+  /** shown while the count runs */
+  hint: string
+  /** buttons */
+  start: string
+  again: string
+  /** results — {reconciled} {missed} {phantom} are substituted */
+  perfect: string
+  done: string
+  /** toast on a perfect count */
+  toast: string
+}
+
 export interface ResumeContent {
   meta: { title: string; description: string }
   account: {
@@ -240,6 +264,8 @@ export interface ResumeContent {
     consoleBanner: string[]
     consoleHint: string
     toast: string
+    /** the Cycle Count portlet — a whack-a-mole in a portlet's clothing */
+    cycleCount: CycleCountCopy
   }
 }
 
@@ -971,5 +997,31 @@ export const resume: ResumeContent = {
     ],
     consoleHint: 'type ns.help() for the maintenance interface.',
     toast: 'Role Center refreshed. Nice reflexes.',
+    cycleCount: {
+      title: 'Cycle Count',
+      countId: 'CC-2024-11',
+      items: [
+        'UHT Milk 1L',
+        'Aseptic Carton',
+        'Cap, 38mm',
+        'Whey Isolate',
+        'Oat Base',
+        'Chocolate Syrup',
+        'Shrink Film',
+        'Label Roll',
+        'Case Tray 12ct',
+        'Strawberry Puree',
+        'Straw, Paper',
+        'Pallet, GMA',
+      ],
+      status: { idle: 'Ready', running: 'In Progress', done: 'Complete' },
+      idle: 'The last count found billions of units that were not there. Bins will start reporting phantom quantities — count each one before the auditor gets to it. Click a bin or press Start.',
+      hint: 'Click (or press 1–9 on) any bin showing a variance.',
+      start: 'Start Count',
+      again: 'Count Again',
+      perfect: 'Zero variance: {reconciled} bins reconciled, none missed. The auditor has nothing to write down.',
+      done: '{reconciled} bins reconciled, {missed} missed. {phantom} phantom units written off — the numbers still cannot be trusted.',
+      toast: 'Count complete — zero variance. Finance would like a word (a nice one).',
+    },
   },
 }

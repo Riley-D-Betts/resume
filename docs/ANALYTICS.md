@@ -188,7 +188,7 @@ rejects anything else. Every event carries `t` (client clock, order only),
 | `vitals` | first hide / `pagehide` | TTFB, FCP, LCP (+ element selector / size), CLS (max session window: ≤ 1 s gap, ≤ 5 s span), INP (`interactionId > 0` only) — **merged into `page_perf`** |
 | `perf` | `load` + 3 s or first hide | nav-timing phases, transfer sizes, protocol, resource summary (count / bytes / cached / by type / 5 slowest as `host/path`), long tasks, LoAF — **merged into `page_perf`** |
 | `js_error` / `resource_error` / `console_error` | `error` (capture phase), `unhandledrejection`, a `console.error` wrapper | message / source / stack; browser-extension URLs are scrubbed to `<ext>` on both sides |
-| `easter_egg` | `console` / `konami` | — |
+| `easter_egg` | `console` / `konami` / `cyclecount` | — |
 | `replay_stopped` / `replay_chunk_lost` | the recorder hit a cap / a chunk upload failed after its retry | reason / `seq`, `rid`, status |
 
 Per-visit caps (`PAGE_CAPS`) bound the chatty types (100 clicks, 5 scroll
