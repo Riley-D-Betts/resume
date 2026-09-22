@@ -57,19 +57,19 @@ test('role center renders, records navigate, zero console errors', async ({ page
   await expect(page.locator('[data-section="employee.skills"]')).toHaveCount(1)
   // a subtab switch works
   await page.getByRole('tab', { name: /Human Resources/ }).click()
-  await expect(page.getByText('ERP / Business Systems')).toBeVisible()
+  await expect(page.getByText('NetSuite Modules')).toBeVisible()
   await page.screenshot({ path: path.join(SCREENS_DIR, `employee-${testInfo.project.name}.png`), fullPage: true })
 
   // -- Employment History list ----------------------------------------
   await page.goto('/positions')
   await expect(page.getByRole('heading', { name: 'Employment History' })).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Ida Milk, LLC' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Suntado LLC' })).toBeVisible()
 
   // -- Projects list + record -----------------------------------------
   await page.goto('/projects')
   await expect(page.getByRole('heading', { name: 'Projects' })).toBeVisible()
-  await page.getByRole('link', { name: 'KidCam' }).click()
-  await expect(page).toHaveURL(/\/projects\/kidcam$/)
+  await page.getByRole('link', { name: 'NetSuite Remediation — Suntado' }).click()
+  await expect(page).toHaveURL(/\/projects\/suntado-netsuite-remediation$/)
   await expect(page.getByRole('heading', { name: 'Project' })).toBeVisible()
   await page.screenshot({ path: path.join(SCREENS_DIR, `project-${testInfo.project.name}.png`), fullPage: true })
 

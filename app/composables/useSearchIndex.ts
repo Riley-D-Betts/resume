@@ -16,7 +16,7 @@ export function useSearchIndex(): SearchHit[] {
     type: 'Employee',
     name: resume.identity.name,
     to: '/employee',
-    terms: `${resume.identity.name} it manager information technology ${resume.employee.skills
+    terms: `${resume.identity.name} netsuite administrator it manager erp manufacturing ${resume.employee.skills
       .flatMap((s) => s.skills)
       .join(' ')}`.toLowerCase(),
   })
@@ -39,10 +39,10 @@ export function useSearchIndex(): SearchHit[] {
     })
   }
 
-  hits.push({ type: 'Report', name: 'KPI Scorecard', to: '/', terms: 'kpi uptime spend headcount dashboard report scorecard' })
-  hits.push({ type: 'Message', name: 'New Message', to: '/contact', terms: 'contact email hire message reach out support' })
+  hits.push({ type: 'Report', name: 'KPI Scorecard', to: '/', terms: 'kpi netsuite go-live remediation audit findings phantom inventory dashboard report scorecard' })
+  hits.push({ type: 'Message', name: 'New Message', to: '/contact', terms: 'contact email phone hire consulting message reach out support' })
   hits.push({ type: 'List', name: 'Employment History', to: '/positions', terms: 'work history jobs positions career activities' })
-  hits.push({ type: 'List', name: 'Projects', to: '/projects', terms: 'projects side builds apps lists' })
+  hits.push({ type: 'List', name: 'Projects', to: '/projects', terms: 'projects netsuite remediation go-live side builds apps lists' })
   hits.push({
     type: 'Script',
     name: 'How This Site Was Built',

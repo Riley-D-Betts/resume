@@ -173,6 +173,16 @@ function reset(): void {
               <span class="ns-field__value"><a :href="`mailto:${c.email}`" data-track-hover="email">{{ c.email }}</a></span>
             </div>
             <div class="ns-field">
+              <span class="ns-field__label">Phone</span>
+              <span class="ns-field__value"><a :href="`tel:${c.phone.replace(/[^\d+]/g, '')}`">{{ c.phone }}</a></span>
+            </div>
+            <div class="ns-field">
+              <span class="ns-field__label">Web</span>
+              <span class="ns-field__value">
+                <a :href="c.web" target="_blank" rel="noopener">{{ c.web.replace(/^https?:\/\//, '') }}</a>
+              </span>
+            </div>
+            <div class="ns-field">
               <span class="ns-field__label">GitHub</span>
               <span class="ns-field__value">
                 <a :href="c.githubUrl" target="_blank" rel="noopener" data-track-hover="github">{{ c.github }}</a>
@@ -181,6 +191,10 @@ function reset(): void {
             <div class="ns-field">
               <span class="ns-field__label">Location</span>
               <span class="ns-field__value">{{ resume.identity.location }} · {{ resume.identity.timezone }}</span>
+            </div>
+            <div class="ns-field">
+              <span class="ns-field__label">Availability</span>
+              <span class="ns-field__value">{{ c.availability }}</span>
             </div>
           </div>
         </div>
