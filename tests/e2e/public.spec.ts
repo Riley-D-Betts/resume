@@ -46,6 +46,17 @@ test('role center renders, records navigate, zero console errors', async ({ page
   await page.waitForTimeout(400) // let the meter + report bars settle
   await page.screenshot({ path: path.join(SCREENS_DIR, `dashboard-${testInfo.project.name}.png`), fullPage: true })
 
+  // -- Cycle Count portlet (the easter egg): starts, runs, and ends ------
+  const cc = page.locator('[data-section="home.cyclecount"]')
+  await expect(cc.locator('.ns-cc__bin')).toHaveCount(9)
+  await cc.getByRole('button', { name: 'Start Count' }).click()
+  await expect(cc.locator('.ns-cc__time')).toBeVisible()
+  // a variance shows up within the first spawn window; counting it scores
+  const variance = cc.locator('.ns-cc__bin--var').first()
+  await expect(variance).toBeVisible({ timeout: 3_000 })
+  await variance.click()
+  await expect(cc.locator('.ns-cc__stat').nth(1).locator('b')).toHaveText('1')
+
   // -- Employee record -------------------------------------------------
   await page.goto('/employee')
   // Bettsuite's title block: the record TYPE is the heading, the name below

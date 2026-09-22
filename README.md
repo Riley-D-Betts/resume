@@ -25,7 +25,7 @@ chunks, a cron trigger prunes both — all inside the free tier.
 
 | Route | What |
 | --- | --- |
-| `/` | Home dashboard — the Role Center |
+| `/` | Home dashboard — the Role Center (the Cycle Count portlet is a whack-a-mole easter egg) |
 | `/employee` | the Employee record — bio, skills sublist, system notes |
 | `/positions`, `/positions/:id` | Employment History list + Position records |
 | `/projects`, `/projects/:id` | Projects list + Project records |

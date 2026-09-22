@@ -1711,3 +1711,165 @@ a.ns-remind__item:hover .ns-remind__count {
     display: none;
   }
 }
+
+/* ============================================================
+   Cycle Count portlet — the whack-a-mole in a portlet's clothing
+   ============================================================ */
+.ns-cc {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+.ns-cc__bar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--ns-muted);
+}
+.ns-cc__bar b {
+  color: var(--ns-ink);
+}
+.ns-cc__time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--ns-bg-600);
+}
+.ns-cc__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px 6px;
+  background: var(--ns-bg-50);
+  border: 1px solid var(--ns-bg-100);
+}
+.ns-cc__stat {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.ns-cc__stat b {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ns-cc__statlabel {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--ns-muted);
+}
+.ns-cc__bad {
+  color: var(--ns-red);
+}
+.ns-cc__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+.ns-cc__bin {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  min-width: 0;
+  padding: 5px 6px;
+  border: 1px solid var(--ns-bg-100);
+  border-radius: var(--ns-radius);
+  background: #fff;
+  color: var(--ns-ink);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.25;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.ns-cc__bin:hover {
+  background: var(--ns-row-hover);
+}
+.ns-cc__bin:focus-visible {
+  outline: 2px solid var(--ns-accent-dark);
+  outline-offset: 1px;
+}
+.ns-cc__code {
+  font-size: 10px;
+  color: var(--ns-muted);
+}
+.ns-cc__item {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ns-cc__qty {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--ns-muted);
+}
+.ns-cc__bin--var {
+  border-color: var(--ns-red);
+  background: var(--ns-red-bg);
+  animation: ns-cc-pulse 700ms ease-in-out infinite alternate;
+}
+.ns-cc__bin--var .ns-cc__qty {
+  color: var(--ns-red);
+  font-weight: 700;
+}
+.ns-cc__bin--var .ns-cc__qty::before {
+  content: '▲ ';
+}
+.ns-cc__bin--ok {
+  border-color: var(--ns-green);
+  background: var(--ns-green-bg);
+}
+.ns-cc__bin--ok .ns-cc__qty {
+  color: var(--ns-green);
+  font-weight: 700;
+}
+@keyframes ns-cc-pulse {
+  from {
+    box-shadow: 0 0 0 0 rgba(166, 50, 50, 0);
+  }
+  to {
+    box-shadow: 0 0 0 3px rgba(166, 50, 50, 0.22);
+  }
+}
+.ns-cc__msg {
+  margin: 0;
+  color: var(--ns-ink);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.ns-cc[data-phase='done'] .ns-cc__msg {
+  padding: 6px 8px;
+  background: var(--ns-bg-50);
+  border-left: 3px solid var(--ns-bg-500);
+}
+.ns-cc__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ns-cc__actions .ns-btn[disabled] {
+  opacity: 0.6;
+  cursor: default;
+}
+.ns-cc__best {
+  color: var(--ns-muted);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ns-cc__bin {
+    transition: none;
+  }
+  .ns-cc__bin--var {
+    animation: none;
+    box-shadow: 0 0 0 2px rgba(166, 50, 50, 0.22);
+  }
+}
