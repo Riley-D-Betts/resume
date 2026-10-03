@@ -42,6 +42,12 @@ export default defineNuxtConfig({
         { property: 'og:type', content: 'website' },
       ],
       link: [{ rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }],
+      script: [
+        {
+          src: 'https://rybbit.rileybetts.xyz/api/script.js?siteId=60078b2a46fd',
+          defer: true,
+        },
+      ],
     },
   },
 
